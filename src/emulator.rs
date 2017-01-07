@@ -1,13 +1,17 @@
+use nes::Nes;
 use rom::Rom;
 
 pub struct Emulator {
-    rom: Rom,
+    nes: Nes,
 }
 
 impl Emulator {
     pub fn new(rom: Rom) -> Emulator {
-        Emulator { rom: rom }
+        Emulator { nes: Nes::new(rom) }
     }
 
-    pub fn run(&self) {}
+    pub fn run(&mut self) {
+        self.nes.reset();
+        self.nes.run_frame();
+    }
 }
