@@ -1,8 +1,9 @@
 mod cpu;
 mod emulator;
 mod interconnect;
-mod rom;
+mod mapper;
 mod nes;
+mod rom;
 
 use std::env;
 

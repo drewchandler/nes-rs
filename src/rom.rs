@@ -5,6 +5,7 @@ use std::fs;
 pub struct Rom {
     pub prg_rom: Vec<Vec<u8>>,
     pub chr_rom: Vec<Vec<u8>>,
+    pub mapper: u8,
 }
 
 impl Rom {
@@ -35,6 +36,7 @@ impl Rom {
         Ok(Rom {
             prg_rom: prg_rom,
             chr_rom: chr_rom,
+            mapper: (header[7] & 0xf0) + (header[6] >> 4),
         })
     }
 }

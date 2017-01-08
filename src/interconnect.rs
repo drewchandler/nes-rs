@@ -1,12 +1,19 @@
 use rom::Rom;
+use mapper::Mapper;
+use mapper::unrom::Unrom;
 
 pub struct Interconnect {
-    rom: Rom,
+    mapper: Box<Mapper>,
 }
 
 impl Interconnect {
     pub fn new(rom: Rom) -> Interconnect {
-        Interconnect { rom: rom }
+        let mapper = match rom.mapper {
+            2 => Unrom::new(rom),
+            _ => panic!("Unimplemented mapper"),
+        };
+
+        Interconnect { mapper: Box::new(mapper) }
     }
 
     pub fn read_double(&self, addr: u16) -> u16 {
@@ -14,6 +21,9 @@ impl Interconnect {
     }
 
     pub fn read_word(&self, addr: u16) -> u8 {
-        0
+        match addr {
+            0x8000...0xffff => self.mapper.read(addr),
+            _ => 0,
+        }
     }
 }
