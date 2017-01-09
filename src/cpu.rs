@@ -9,6 +9,86 @@ pub struct Cpu {
     y: u8,
 }
 
+#[derive(Debug)]
+enum AddressingMode {
+    Implicit,
+    Accumulator,
+    Immediate,
+    ZeroPage,
+    ZeroPageX,
+    ZeroPageY,
+    Relative,
+    Absolute,
+    AbsoluteX,
+    AbsoluteY,
+    Indirect,
+    IndirectX,
+    IndirectY,
+}
+
+#[derive(Debug)]
+enum Op {
+    Adc,
+    And,
+    Asl,
+    Bcc,
+    Bcs,
+    Beq,
+    Bit,
+    Bmi,
+    Bne,
+    Bpl,
+    Brk,
+    Bvc,
+    Bvs,
+    Clc,
+    Cld,
+    Cli,
+    Clv,
+    Cmp,
+    Cpx,
+    Cpy,
+    Dec,
+    Dex,
+    Dey,
+    Eor,
+    Inc,
+    Inx,
+    Iny,
+    Jmp,
+    Jsr,
+    Lda,
+    Ldx,
+    Ldy,
+    Lsr,
+    Nop,
+    Ora,
+    Pha,
+    Php,
+    Pla,
+    Plp,
+    Rol,
+    Ror,
+    Rti,
+    Rts,
+    Sbc,
+    Sec,
+    Sed,
+    Sei,
+    Sta,
+    Stx,
+    Sty,
+    Tax,
+    Tay,
+    Tsx,
+    Txa,
+    Txs,
+    Tya,
+}
+
+#[derive(Debug)]
+struct Instruction(Op, AddressingMode);
+
 impl Cpu {
     pub fn new() -> Cpu {
         Cpu {
@@ -26,106 +106,132 @@ impl Cpu {
     }
 
     pub fn step(&mut self, interconnect: &mut Interconnect) {
-        let opcode = self.read_pc(interconnect);
-        println!("Executing {:x}", opcode);
-
-        match opcode {
-            0x20 => {
-                let addr = self.absolute(interconnect);
-                self.jsr(interconnect, addr);
-            }
-            0x31 => {
-                let addr = self.indirect_y(interconnect);
-                let value = interconnect.read_word(addr);
-                self.and(value);
-            }
-            0x4c => {
-                let addr = self.absolute(interconnect);
-                self.jmp(addr);
-            }
-            0x78 => self.sei(),
-            0x8d => {
-                let addr = self.absolute(interconnect);
-                self.sta(interconnect, addr);
-            }
-            0x94 => {
-                let addr = self.zero_page_x(interconnect);
-                self.sty(interconnect, addr);
-            }
-            0x9a => {
-                self.txs();
-            }
-            0x9d => {
-                let addr = self.absolute_x(interconnect);
-                self.sta(interconnect, addr);
-            }
-            0x10 => {
-                let offset = self.immediate(interconnect);
-                self.bpl(offset);
-            }
-            0xa2 => {
-                let value = self.immediate(interconnect);
-                self.ldx(value);
-            }
-            0xa6 => {
-                let addr = self.zero_page(interconnect);
-                let value = interconnect.read_word(addr);
-                self.ldx(value);
-            }
-            0xa9 => {
-                let value = self.immediate(interconnect);
-                self.lda(value);
-            }
-            0xad => {
-                let addr = self.absolute(interconnect);
-                let value = interconnect.read_word(addr);
-                self.lda(value);
-            }
-            0xe0 => {
-                let value = self.immediate(interconnect);
-                self.cpx(value);
-            }
-            0xf0 => {
-                let offset = self.immediate(interconnect);
-                self.beq(offset);
-            }
-            _ => panic!("Unimplemented instruction: {:x}", opcode),
-        };
+        let instruction = self.read_instruction(interconnect);
+        self.execute(interconnect, instruction)
     }
+
+    fn read_instruction(&mut self, interconnect: &Interconnect) -> Instruction {
+        match self.read_pc(interconnect) {
+            0x00 => Instruction(Op::Brk, AddressingMode::Implicit),
+            0x01 => Instruction(Op::Ora, AddressingMode::IndirectX),
+            0x05 => Instruction(Op::Ora, AddressingMode::ZeroPage),
+            0x06 => Instruction(Op::Asl, AddressingMode::ZeroPage),
+            0x20 => Instruction(Op::Jsr, AddressingMode::Absolute),
+            0x31 => Instruction(Op::And, AddressingMode::IndirectY),
+            0x4c => Instruction(Op::Jmp, AddressingMode::Absolute),
+            0x78 => Instruction(Op::Sei, AddressingMode::Implicit),
+            0x8d => Instruction(Op::Sta, AddressingMode::Absolute),
+            0x94 => Instruction(Op::Sty, AddressingMode::ZeroPageX),
+            0x9a => Instruction(Op::Txs, AddressingMode::Implicit),
+            0x9d => Instruction(Op::Sta, AddressingMode::AbsoluteX),
+            0x10 => Instruction(Op::Bpl, AddressingMode::Immediate),
+            0xa2 => Instruction(Op::Ldx, AddressingMode::Immediate),
+            0xa6 => Instruction(Op::Ldx, AddressingMode::ZeroPage),
+            0xa9 => Instruction(Op::Lda, AddressingMode::Immediate),
+            0xad => Instruction(Op::Lda, AddressingMode::Absolute),
+            0xe0 => Instruction(Op::Cpx, AddressingMode::Immediate),
+            0xe6 => Instruction(Op::Inc, AddressingMode::ZeroPage),
+            0xf0 => Instruction(Op::Beq, AddressingMode::Immediate),
+            opcode => panic!("Unimplemented instruction: {:x}", opcode),
+        }
+    }
+
+    fn execute(&mut self, interconnect: &mut Interconnect, instruction: Instruction) {
+        println!("Executing {:?}", instruction);
+
+        match instruction {
+            Instruction(Op::Sei, _) => self.sei(),
+            Instruction(Op::Lda, am) => {
+                let value = self.value_for(interconnect, am);
+                self.lda(value)
+            }
+            Instruction(Op::Sta, am) => {
+                let addr = self.addr_for(interconnect, am);
+                self.sta(interconnect, addr)
+            }
+            Instruction(Op::Jmp, am) => {
+                let addr = self.addr_for(interconnect, am);
+                self.jmp(addr)
+            }
+            Instruction(Op::Ldx, am) => {
+                let value = self.value_for(interconnect, am);
+                self.ldx(value)
+            }
+            Instruction(Op::Txs, _) => self.txs(),
+            Instruction(Op::Bpl, am) => {
+                let offset = self.value_for(interconnect, am);
+                self.bpl(offset)
+            }
+            Instruction(Op::And, am) => {
+                let value = self.value_for(interconnect, am);
+                self.and(value)
+            }
+            Instruction(Op::Sty, am) => {
+                let addr = self.addr_for(interconnect, am);
+                self.sty(interconnect, addr)
+            }
+            Instruction(Op::Jsr, am) => {
+                let addr = self.addr_for(interconnect, am);
+                self.jsr(interconnect, addr)
+            }
+            Instruction(Op::Cpx, am) => {
+                let value = self.value_for(interconnect, am);
+                self.cpx(value)
+            }
+            Instruction(Op::Beq, am) => {
+                let offset = self.value_for(interconnect, am);
+                self.beq(offset)
+            }
+            Instruction(Op::Inc, am) => {
+                let addr = self.addr_for(interconnect, am);
+                self.inc(interconnect, addr)
+            }
+            _ => panic!("Unimplemented operation: {:?}", instruction.0),
+        }
+    }
+
+    fn value_for(&mut self, interconnect: &Interconnect, am: AddressingMode) -> u8 {
+        match am {
+            AddressingMode::Immediate => self.read_pc(interconnect),
+            AddressingMode::Absolute |
+            AddressingMode::ZeroPage |
+            AddressingMode::IndirectY => {
+                let addr = self.addr_for(interconnect, am);
+                interconnect.read_word(addr)
+            }
+            _ => panic!("Unimplemented addressing mode: {:?}", am),
+        }
+    }
+
+    fn addr_for(&mut self, interconnect: &Interconnect, am: AddressingMode) -> u16 {
+        match am {
+            AddressingMode::Absolute => {
+                let lower = self.read_pc(interconnect);
+                let higher = self.read_pc(interconnect);
+                ((higher as u16) << 8) + lower as u16
+            }
+            AddressingMode::IndirectY => {
+                let zero_page_addr = self.read_pc(interconnect);
+                let addr = interconnect.read_double(zero_page_addr as u16);
+                addr + self.y as u16
+            }
+            AddressingMode::ZeroPage => self.read_pc(interconnect) as u16,
+            AddressingMode::ZeroPageX => {
+                let zero_page_addr = self.read_pc(interconnect);
+                (zero_page_addr + self.x) as u16
+            }
+            AddressingMode::AbsoluteX => {
+                self.addr_for(interconnect, AddressingMode::Absolute) + self.x as u16
+            }
+            _ => panic!("Unimplemented addressing mode: {:?}", am),
+        }
+    }
+
 
     fn read_pc(&mut self, interconnect: &Interconnect) -> u8 {
         let value = interconnect.read_word(self.pc);
         self.pc += 1;
         value
-    }
-
-    fn immediate(&mut self, interconnect: &Interconnect) -> u8 {
-        self.read_pc(interconnect)
-    }
-
-    fn absolute(&mut self, interconnect: &Interconnect) -> u16 {
-        let lower = self.read_pc(interconnect);
-        let higher = self.read_pc(interconnect);
-        ((higher as u16) << 8) + lower as u16
-    }
-
-    fn absolute_x(&mut self, interconnect: &Interconnect) -> u16 {
-        self.absolute(interconnect) + self.x as u16
-    }
-
-    fn indirect_y(&mut self, interconnect: &Interconnect) -> u16 {
-        let zero_page_addr = self.read_pc(interconnect);
-        let addr = interconnect.read_double(zero_page_addr as u16);
-        addr + self.y as u16
-    }
-
-    fn zero_page(&mut self, interconnect: &Interconnect) -> u16 {
-        self.read_pc(interconnect) as u16
-    }
-
-    fn zero_page_x(&mut self, interconnect: &Interconnect) -> u16 {
-        let zero_page_addr = self.read_pc(interconnect);
-        (zero_page_addr + self.x) as u16
     }
 
     fn set_interrupt_disable(&mut self, value: bool) {
@@ -192,6 +298,13 @@ impl Cpu {
         self.set_zero_flag(x == value);
         self.set_negative_flag(x < value);
         self.set_carry_flag(x >= value);
+    }
+
+    fn inc(&mut self, interconnect: &mut Interconnect, addr: u16) {
+        let value = interconnect.read_word(addr) + 1;
+        self.set_zero_flag(value == 0);
+        self.set_negative_flag(value & 0b10000000 != 0);
+        interconnect.write_word(addr, value);
     }
 
     fn jmp(&mut self, addr: u16) {
