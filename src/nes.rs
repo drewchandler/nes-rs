@@ -19,7 +19,7 @@ impl Nes {
         self.cpu.reset(&self.interconnect);
     }
 
-    pub fn run_frame(&self) {
-        self.cpu.step(&self.interconnect);
+    pub fn run_frame(&mut self) {
+        self.cpu.step(&mut self.interconnect);
     }
 }

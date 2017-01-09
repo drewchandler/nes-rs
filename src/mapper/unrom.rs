@@ -25,5 +25,8 @@ impl Mapper for Unrom {
             _ => panic!("Illegal memory address for mapper: {}", addr),
         }
     }
-    fn write(&mut self, addr: u16, value: u8) {}
+
+    fn write(&mut self, addr: u16, _: u8) {
+        self.active_bank = (addr & 0x000f) as usize;
+    }
 }

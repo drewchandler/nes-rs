@@ -12,6 +12,9 @@ impl Emulator {
 
     pub fn run(&mut self) {
         self.nes.reset();
-        self.nes.run_frame();
+
+        loop {
+            self.nes.run_frame();
+        }
     }
 }

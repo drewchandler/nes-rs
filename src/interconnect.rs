@@ -4,6 +4,41 @@ use mapper::unrom::Unrom;
 
 pub struct Interconnect {
     mapper: Box<Mapper>,
+    ram: [u8; 2048],
+}
+
+enum MappedAddress {
+    Ram(usize),
+    PpuControlRegister1,
+    PpuControlRegister2,
+    PpuStatusRegister,
+    SprRamAddressRegister,
+    SprRamIoRegister,
+    VramAddressRegister1,
+    VramAddressRegister2,
+    VramIoRegister,
+    PrgRom,
+}
+
+fn map_addr(addr: u16) -> MappedAddress {
+    match addr {
+        0x0000...0x1fff => MappedAddress::Ram(addr as usize % 2048),
+        0x8000...0xffff => MappedAddress::PrgRom,
+        0x2000...0x3fff => {
+            match (addr - 0x2000) % 8 {
+                0 => MappedAddress::PpuControlRegister1,
+                1 => MappedAddress::PpuControlRegister2,
+                2 => MappedAddress::PpuStatusRegister,
+                3 => MappedAddress::SprRamAddressRegister,
+                4 => MappedAddress::SprRamIoRegister,
+                5 => MappedAddress::VramAddressRegister1,
+                6 => MappedAddress::VramAddressRegister2,
+                7 => MappedAddress::VramIoRegister,
+                _ => unreachable!(),
+            }
+        }
+        _ => panic!("Unmappable address: {:x}", addr),
+    }
 }
 
 impl Interconnect {
@@ -13,7 +48,10 @@ impl Interconnect {
             _ => panic!("Unimplemented mapper"),
         };
 
-        Interconnect { mapper: Box::new(mapper) }
+        Interconnect {
+            mapper: Box::new(mapper),
+            ram: [0; 2048],
+        }
     }
 
     pub fn read_double(&self, addr: u16) -> u16 {
@@ -21,9 +59,38 @@ impl Interconnect {
     }
 
     pub fn read_word(&self, addr: u16) -> u8 {
-        match addr {
-            0x8000...0xffff => self.mapper.read(addr),
-            _ => 0,
+        match map_addr(addr) {
+            MappedAddress::Ram(addr) => self.ram[addr],
+            MappedAddress::PrgRom => self.mapper.read(addr),
+            MappedAddress::PpuStatusRegister => {
+                println!("WARNING: Reading from PPU Status Register is not implemented");
+                0
+            }
+            _ => panic!("Reading from unimplemented memory address: {:x}", addr),
+        }
+    }
+
+    pub fn write_word(&mut self, addr: u16, value: u8) {
+        match map_addr(addr) {
+            MappedAddress::Ram(addr) => self.ram[addr] = value,
+            MappedAddress::PrgRom => self.mapper.write(addr, value),
+            _ => {
+                println!("WARNING: Writing to unimplemented memory address: {:x}",
+                         addr)
+            }
+        }
+    }
+
+    pub fn write_double(&mut self, addr: u16, value: u16) {
+        match map_addr(addr) {
+            MappedAddress::Ram(addr) => {
+                self.ram[addr] = value as u8;
+                self.ram[addr + 1] = (value >> 8) as u8;
+            }
+            _ => {
+                println!("WARNING: Writing to unimplemented memory address: {:x}",
+                         addr)
+            }
         }
     }
 }
