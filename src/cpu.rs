@@ -145,62 +145,37 @@ impl Cpu {
     fn execute(&mut self, interconnect: &mut Interconnect, instruction: Instruction) {
         println!("Executing {:?}", instruction);
 
+        macro_rules! with_value {
+            ($am:expr, $f:expr) => ({
+                let value = self.value_for(interconnect, $am);
+                $f(value)
+            })
+        }
+
+        macro_rules! with_addr {
+            ($am:expr, $f:expr) => ({
+                let addr = self.addr_for(interconnect, $am);
+                $f(addr)
+            })
+        }
+
         match instruction {
             Instruction(Op::Sei, _) => self.sei(),
-            Instruction(Op::Lda, am) => {
-                let value = self.value_for(interconnect, am);
-                self.lda(value)
-            }
-            Instruction(Op::Sta, am) => {
-                let addr = self.addr_for(interconnect, am);
-                self.sta(interconnect, addr)
-            }
-            Instruction(Op::Jmp, am) => {
-                let addr = self.addr_for(interconnect, am);
-                self.jmp(addr)
-            }
-            Instruction(Op::Ldx, am) => {
-                let value = self.value_for(interconnect, am);
-                self.ldx(value)
-            }
+            Instruction(Op::Lda, am) => with_value!(am, |value| self.lda(value)),
+            Instruction(Op::Sta, am) => with_addr!(am, |addr| self.sta(interconnect, addr)),
+            Instruction(Op::Jmp, am) => with_addr!(am, |addr| self.jmp(addr)),
+            Instruction(Op::Ldx, am) => with_value!(am, |value| self.ldx(value)),
             Instruction(Op::Txs, _) => self.txs(),
-            Instruction(Op::Bpl, am) => {
-                let offset = self.value_for(interconnect, am);
-                self.bpl(offset)
-            }
-            Instruction(Op::And, am) => {
-                let value = self.value_for(interconnect, am);
-                self.and(value)
-            }
-            Instruction(Op::Sty, am) => {
-                let addr = self.addr_for(interconnect, am);
-                self.sty(interconnect, addr)
-            }
-            Instruction(Op::Jsr, am) => {
-                let addr = self.addr_for(interconnect, am);
-                self.jsr(interconnect, addr)
-            }
-            Instruction(Op::Cpx, am) => {
-                let value = self.value_for(interconnect, am);
-                self.cpx(value)
-            }
-            Instruction(Op::Beq, am) => {
-                let offset = self.value_for(interconnect, am);
-                self.beq(offset)
-            }
-            Instruction(Op::Inc, am) => {
-                let addr = self.addr_for(interconnect, am);
-                self.inc(interconnect, addr)
-            }
+            Instruction(Op::Bpl, am) => with_value!(am, |value| self.bpl(value)),
+            Instruction(Op::And, am) => with_value!(am, |value| self.and(value)),
+            Instruction(Op::Sty, am) => with_addr!(am, |addr| self.sty(interconnect, addr)),
+            Instruction(Op::Jsr, am) => with_addr!(am, |addr| self.jsr(interconnect, addr)),
+            Instruction(Op::Cpx, am) => with_value!(am, |value| self.cpx(value)),
+            Instruction(Op::Beq, am) => with_value!(am, |value| self.beq(value)),
+            Instruction(Op::Inc, am) => with_addr!(am, |addr| self.inc(interconnect, addr)),
             Instruction(Op::Rts, _) => self.rts(interconnect),
-            Instruction(Op::Cpy, am) => {
-                let value = self.value_for(interconnect, am);
-                self.cpy(value)
-            }
-            Instruction(Op::Ora, am) => {
-                let value = self.value_for(interconnect, am);
-                self.ora(value)
-            }
+            Instruction(Op::Cpy, am) => with_value!(am, |value| self.cpy(value)),
+            Instruction(Op::Ora, am) => with_value!(am, |value| self.ora(value)),
             _ => panic!("Unimplemented operation: {:?}", instruction.0),
         }
     }
