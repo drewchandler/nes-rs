@@ -134,10 +134,14 @@ impl Cpu {
             0xa6 => Instruction(Op::Ldx, AddressingMode::ZeroPage),
             0xa9 => Instruction(Op::Lda, AddressingMode::Immediate),
             0xad => Instruction(Op::Lda, AddressingMode::Absolute),
+            0xbd => Instruction(Op::Lda, AddressingMode::AbsoluteX),
             0xc4 => Instruction(Op::Cpy, AddressingMode::ZeroPage),
+            0xc9 => Instruction(Op::Cmp, AddressingMode::Immediate),
+            0xca => Instruction(Op::Dex, AddressingMode::Implicit),
+            0xd0 => Instruction(Op::Bne, AddressingMode::Relative),
             0xe0 => Instruction(Op::Cpx, AddressingMode::Immediate),
             0xe6 => Instruction(Op::Inc, AddressingMode::ZeroPage),
-            0xf0 => Instruction(Op::Beq, AddressingMode::Immediate),
+            0xf0 => Instruction(Op::Beq, AddressingMode::Relative),
             opcode => panic!("Unimplemented instruction: {:x}", opcode),
         }
     }
@@ -171,11 +175,14 @@ impl Cpu {
             Instruction(Op::Sty, am) => with_addr!(am, |addr| self.sty(interconnect, addr)),
             Instruction(Op::Jsr, am) => with_addr!(am, |addr| self.jsr(interconnect, addr)),
             Instruction(Op::Cpx, am) => with_value!(am, |value| self.cpx(value)),
-            Instruction(Op::Beq, am) => with_value!(am, |value| self.beq(value)),
+            Instruction(Op::Beq, am) => with_addr!(am, |addr| self.beq(addr)),
             Instruction(Op::Inc, am) => with_addr!(am, |addr| self.inc(interconnect, addr)),
             Instruction(Op::Rts, _) => self.rts(interconnect),
             Instruction(Op::Cpy, am) => with_value!(am, |value| self.cpy(value)),
             Instruction(Op::Ora, am) => with_value!(am, |value| self.ora(value)),
+            Instruction(Op::Cmp, am) => with_value!(am, |value| self.cmp(value)),
+            Instruction(Op::Bne, am) => with_addr!(am, |addr| self.bne(addr)),
+            Instruction(Op::Dex, _) => self.dex(),
             _ => panic!("Unimplemented operation: {:?}", instruction.0),
         }
     }
@@ -184,6 +191,7 @@ impl Cpu {
         match am {
             AddressingMode::Immediate => self.read_pc(interconnect),
             AddressingMode::Absolute |
+            AddressingMode::AbsoluteX |
             AddressingMode::ZeroPage |
             AddressingMode::IndirectY => {
                 let addr = self.addr_for(interconnect, am);
@@ -213,6 +221,7 @@ impl Cpu {
             AddressingMode::AbsoluteX => {
                 self.addr_for(interconnect, AddressingMode::Absolute) + self.x as u16
             }
+            AddressingMode::Relative => self.read_pc(interconnect) as u16 + self.pc,
             _ => panic!("Unimplemented addressing mode: {:?}", am),
         }
     }
@@ -277,9 +286,15 @@ impl Cpu {
         self.set_negative_flag(new_a & 0b10000000 != 0);
     }
 
-    fn beq(&mut self, offset: u8) {
+    fn beq(&mut self, addr: u16) {
         if self.zero_flag() {
-            self.pc += offset as u16;
+            self.pc = addr;
+        }
+    }
+
+    fn bne(&mut self, addr: u16) {
+        if !self.zero_flag() {
+            self.pc = addr;
         }
     }
 
@@ -287,6 +302,11 @@ impl Cpu {
         if !self.negative_flag() {
             self.pc += offset as u16;
         }
+    }
+
+    fn cmp(&mut self, value: u8) {
+        let a = self.a;
+        self.compare(a, value);
     }
 
     fn cpx(&mut self, value: u8) {
@@ -297,6 +317,13 @@ impl Cpu {
     fn cpy(&mut self, value: u8) {
         let y = self.y;
         self.compare(y, value);
+    }
+
+    fn dex(&mut self) {
+        self.x -= 1;
+        let x = self.x;
+        self.set_zero_flag(x == 0);
+        self.set_negative_flag(x & 0b10000000 != 0);
     }
 
     fn inc(&mut self, interconnect: &mut Interconnect, addr: u16) {
