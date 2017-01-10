@@ -116,19 +116,25 @@ impl Cpu {
             0x01 => Instruction(Op::Ora, AddressingMode::IndirectX),
             0x05 => Instruction(Op::Ora, AddressingMode::ZeroPage),
             0x06 => Instruction(Op::Asl, AddressingMode::ZeroPage),
+            0x08 => Instruction(Op::Php, AddressingMode::Implicit),
+            0x09 => Instruction(Op::Ora, AddressingMode::Immediate),
             0x20 => Instruction(Op::Jsr, AddressingMode::Absolute),
             0x31 => Instruction(Op::And, AddressingMode::IndirectY),
             0x4c => Instruction(Op::Jmp, AddressingMode::Absolute),
+            0x60 => Instruction(Op::Rts, AddressingMode::Implicit),
             0x78 => Instruction(Op::Sei, AddressingMode::Implicit),
+            0x85 => Instruction(Op::Sta, AddressingMode::ZeroPage),
             0x8d => Instruction(Op::Sta, AddressingMode::Absolute),
             0x94 => Instruction(Op::Sty, AddressingMode::ZeroPageX),
             0x9a => Instruction(Op::Txs, AddressingMode::Implicit),
             0x9d => Instruction(Op::Sta, AddressingMode::AbsoluteX),
             0x10 => Instruction(Op::Bpl, AddressingMode::Immediate),
             0xa2 => Instruction(Op::Ldx, AddressingMode::Immediate),
+            0xa5 => Instruction(Op::Lda, AddressingMode::ZeroPage),
             0xa6 => Instruction(Op::Ldx, AddressingMode::ZeroPage),
             0xa9 => Instruction(Op::Lda, AddressingMode::Immediate),
             0xad => Instruction(Op::Lda, AddressingMode::Absolute),
+            0xc4 => Instruction(Op::Cpy, AddressingMode::ZeroPage),
             0xe0 => Instruction(Op::Cpx, AddressingMode::Immediate),
             0xe6 => Instruction(Op::Inc, AddressingMode::ZeroPage),
             0xf0 => Instruction(Op::Beq, AddressingMode::Immediate),
@@ -185,6 +191,15 @@ impl Cpu {
             Instruction(Op::Inc, am) => {
                 let addr = self.addr_for(interconnect, am);
                 self.inc(interconnect, addr)
+            }
+            Instruction(Op::Rts, _) => self.rts(interconnect),
+            Instruction(Op::Cpy, am) => {
+                let value = self.value_for(interconnect, am);
+                self.cpy(value)
+            }
+            Instruction(Op::Ora, am) => {
+                let value = self.value_for(interconnect, am);
+                self.ora(value)
             }
             _ => panic!("Unimplemented operation: {:?}", instruction.0),
         }
@@ -274,6 +289,12 @@ impl Cpu {
         };
     }
 
+    fn compare(&mut self, a: u8, b: u8) {
+        self.set_zero_flag(a == b);
+        self.set_negative_flag(a < b);
+        self.set_carry_flag(a >= b);
+    }
+
     fn and(&mut self, value: u8) {
         let new_a = self.a & value;
         self.a = new_a;
@@ -295,9 +316,12 @@ impl Cpu {
 
     fn cpx(&mut self, value: u8) {
         let x = self.x;
-        self.set_zero_flag(x == value);
-        self.set_negative_flag(x < value);
-        self.set_carry_flag(x >= value);
+        self.compare(x, value);
+    }
+
+    fn cpy(&mut self, value: u8) {
+        let y = self.y;
+        self.compare(y, value);
     }
 
     fn inc(&mut self, interconnect: &mut Interconnect, addr: u16) {
@@ -329,6 +353,17 @@ impl Cpu {
         self.set_negative_flag(value & 0b10000000 != 0);
     }
 
+    fn ora(&mut self, value: u8) {
+        let new_a = self.a | value;
+        self.a = new_a;
+        self.set_zero_flag(new_a == 0);
+        self.set_negative_flag(new_a & 0b10000000 != 0);
+    }
+
+    fn rts(&mut self, interconnect: &mut Interconnect) {
+        self.pc = self.pop_double(interconnect) + 1;
+    }
+
     fn sei(&mut self) {
         self.set_interrupt_disable(true);
     }
@@ -348,5 +383,10 @@ impl Cpu {
     fn push_double(&mut self, interconnect: &mut Interconnect, value: u16) {
         interconnect.write_double(0x100 + self.sp as u16 - 1, value);
         self.sp -= 2;
+    }
+
+    fn pop_double(&mut self, interconnect: &mut Interconnect) -> u16 {
+        self.sp += 2;
+        interconnect.read_double(0x100 + self.sp as u16 - 1)
     }
 }
