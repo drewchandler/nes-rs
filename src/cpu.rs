@@ -1,5 +1,12 @@
 use interconnect::Interconnect;
 
+const CARRY_FLAG: u8 = 0x01;
+const ZERO_FLAG: u8 = 0x02;
+const INTERUPT_DISABLE: u8 = 0x04;
+const BREAK_COMMAND: u8 = 0x10;
+const OVERFLOW_FLAG: u8 = 0x40;
+const NEGATIVE_FLAG: u8 = 0x80;
+
 pub struct Cpu {
     a: u8,
     p: u8,
@@ -234,43 +241,75 @@ impl Cpu {
         value
     }
 
-    fn set_interrupt_disable(&mut self, value: bool) {
-        self.p = if value {
-            self.p | 0b100
-        } else {
-            self.p & 0b11111011
-        };
-    }
-
-    fn zero_flag(&self) -> bool {
-        self.p & 0b10 != 0
-    }
-
-    fn set_zero_flag(&mut self, value: bool) {
-        self.p = if value {
-            self.p | 0b10
-        } else {
-            self.p & 0b11111101
-        };
-    }
-
-    fn negative_flag(&self) -> bool {
-        self.p & 0b10000000 != 0
-    }
-
-    fn set_negative_flag(&mut self, value: bool) {
-        self.p = if value {
-            self.p | 0b10000000
-        } else {
-            self.p & 0b01111111
-        };
+    fn carry_flag(&self) -> bool {
+        self.p & CARRY_FLAG != 0
     }
 
     fn set_carry_flag(&mut self, value: bool) {
         self.p = if value {
-            self.p | 1
+            self.p | CARRY_FLAG
         } else {
-            self.p & 0b11111110
+            self.p & !CARRY_FLAG
+        };
+    }
+
+    fn zero_flag(&self) -> bool {
+        self.p & ZERO_FLAG != 0
+    }
+
+    fn set_zero_flag(&mut self, value: bool) {
+        self.p = if value {
+            self.p | ZERO_FLAG
+        } else {
+            self.p & !ZERO_FLAG
+        };
+    }
+
+    fn interrupt_disable(&self) -> bool {
+        self.p & INTERUPT_DISABLE != 0
+    }
+
+    fn set_interrupt_disable(&mut self, value: bool) {
+        self.p = if value {
+            self.p | INTERUPT_DISABLE
+        } else {
+            self.p & !INTERUPT_DISABLE
+        };
+    }
+
+    fn break_command(&self) -> bool {
+        self.p & BREAK_COMMAND != 0
+    }
+
+    fn set_break_command(&mut self, value: bool) {
+        self.p = if value {
+            self.p | BREAK_COMMAND
+        } else {
+            self.p & !BREAK_COMMAND
+        }
+    }
+
+    fn overflow_flag(&self) -> bool {
+        self.p & OVERFLOW_FLAG != 0
+    }
+
+    fn set_overflow_flag(&mut self, value: bool) {
+        self.p = if value {
+            self.p | OVERFLOW_FLAG
+        } else {
+            self.p & !OVERFLOW_FLAG
+        };
+    }
+
+    fn negative_flag(&self) -> bool {
+        self.p & NEGATIVE_FLAG != 0
+    }
+
+    fn set_negative_flag(&mut self, value: bool) {
+        self.p = if value {
+            self.p | NEGATIVE_FLAG
+        } else {
+            self.p & !NEGATIVE_FLAG
         };
     }
 
