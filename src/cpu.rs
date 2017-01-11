@@ -52,6 +52,7 @@ impl Cpu {
         }
 
         match op {
+            Op::Adc => with_value!(|value| self.adc(value)),
             Op::And => with_value!(|value| self.and(value)),
             Op::Bcc => with_addr!(|addr| self.bcc(addr)),
             Op::Bcs => with_addr!(|addr| self.bcs(addr)),
@@ -222,6 +223,17 @@ impl Cpu {
         self.set_carry_flag(a >= b);
     }
 
+    fn adc(&mut self, value: u8) {
+        let a = self.a;
+        let carry_flag = if self.carry_flag() { 1 } else { 0 };
+        let (result, carry) = a.overflowing_add(value);
+        let (result, carry2) = result.overflowing_add(carry_flag);
+
+        self.a = self.set_zn(result);
+        self.set_overflow_flag(((a ^ value) & 0x08 != 0x08) && ((a ^ result) & 0x08 == 0x08));
+        self.set_carry_flag(!(carry || carry2));
+    }
+
     fn and(&mut self, value: u8) {
         let a = self.a;
         self.a = self.set_zn(a & value);
@@ -350,6 +362,7 @@ impl Cpu {
         let carry_flag = if self.carry_flag() { 0 } else { 1 };
         let (result, carry) = a.overflowing_sub(value);
         let (result, carry2) = result.overflowing_sub(carry_flag);
+
 
         self.a = self.set_zn(result);
         self.set_overflow_flag(((a ^ value) & 0x08 == 0x08) && ((a ^ result) & 0x08 == 0x08));
