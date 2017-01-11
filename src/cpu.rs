@@ -34,13 +34,8 @@ impl Cpu {
     }
 
     pub fn step(&mut self, interconnect: &mut Interconnect) {
-        let instruction = Instruction::from_opcode(self.read_pc(interconnect));
-        self.execute(interconnect, instruction)
-    }
-
-    fn execute(&mut self, interconnect: &mut Interconnect, instruction: Instruction) {
-        println!("Executing {:?}", instruction);
-        let Instruction(op, am) = instruction;
+        let Instruction(op, am) = Instruction::from_opcode(self.read_pc(interconnect));
+        println!("Executing {:?} {:?}", op, am);
 
         macro_rules! with_value {
             ($f:expr) => ({
@@ -57,38 +52,38 @@ impl Cpu {
         }
 
         match op {
-            Op::Sei => self.sei(),
-            Op::Lda => with_value!(|value| self.lda(value)),
-            Op::Sta => with_addr!(|addr| self.sta(interconnect, addr)),
-            Op::Jmp => with_addr!(|addr| self.jmp(addr)),
-            Op::Ldx => with_value!(|value| self.ldx(value)),
-            Op::Txs => self.txs(),
-            Op::Bpl => with_addr!(|addr| self.bpl(addr)),
             Op::And => with_value!(|value| self.and(value)),
-            Op::Sty => with_addr!(|addr| self.sty(interconnect, addr)),
-            Op::Jsr => with_addr!(|addr| self.jsr(interconnect, addr)),
-            Op::Cpx => with_value!(|value| self.cpx(value)),
+            Op::Bcc => with_addr!(|addr| self.bcc(addr)),
+            Op::Bcs => with_addr!(|addr| self.bcs(addr)),
             Op::Beq => with_addr!(|addr| self.beq(addr)),
-            Op::Inc => with_addr!(|addr| self.inc(interconnect, addr)),
-            Op::Rts => self.rts(interconnect),
-            Op::Cpy => with_value!(|value| self.cpy(value)),
-            Op::Ora => with_value!(|value| self.ora(value)),
-            Op::Cmp => with_value!(|value| self.cmp(value)),
             Op::Bne => with_addr!(|addr| self.bne(addr)),
+            Op::Bpl => with_addr!(|addr| self.bpl(addr)),
+            Op::Brk => self.brk(interconnect),
+            Op::Cmp => with_value!(|value| self.cmp(value)),
+            Op::Cpx => with_value!(|value| self.cpx(value)),
+            Op::Cpy => with_value!(|value| self.cpy(value)),
             Op::Dex => self.dex(),
             Op::Eor => with_value!(|value| self.eor(value)),
-            Op::Php => self.php(interconnect),
+            Op::Inc => with_addr!(|addr| self.inc(interconnect, addr)),
+            Op::Jmp => with_addr!(|addr| self.jmp(addr)),
+            Op::Jsr => with_addr!(|addr| self.jsr(interconnect, addr)),
+            Op::Lda => with_value!(|value| self.lda(value)),
+            Op::Ldx => with_value!(|value| self.ldx(value)),
+            Op::Ldy => with_value!(|value| self.ldy(value)),
+            Op::Ora => with_value!(|value| self.ora(value)),
             Op::Pha => self.pha(interconnect),
-            Op::Txa => self.txa(),
-            Op::Bcc => with_addr!(|addr| self.bcc(addr)),
-            Op::Sbc => with_value!(|value| self.sbc(value)),
-            Op::Tax => self.tax(),
+            Op::Php => self.php(interconnect),
             Op::Pla => self.pla(interconnect),
             Op::Plp => self.plp(interconnect),
-            Op::Ldy => with_value!(|value| self.ldy(value)),
-            Op::Bcs => with_addr!(|addr| self.bcs(addr)),
+            Op::Rts => self.rts(interconnect),
+            Op::Sbc => with_value!(|value| self.sbc(value)),
+            Op::Sei => self.sei(),
+            Op::Sta => with_addr!(|addr| self.sta(interconnect, addr)),
             Op::Stx => with_addr!(|addr| self.stx(interconnect, addr)),
-            Op::Brk => self.brk(interconnect),
+            Op::Sty => with_addr!(|addr| self.sty(interconnect, addr)),
+            Op::Tax => self.tax(),
+            Op::Txa => self.txa(),
+            Op::Txs => self.txs(),
             _ => panic!("Unimplemented operation: {:?}", op),
         }
     }
