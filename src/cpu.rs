@@ -126,28 +126,46 @@ impl Cpu {
             0x08 => Instruction(Op::Php, AddressingMode::Implicit),
             0x09 => Instruction(Op::Ora, AddressingMode::Immediate),
             0x20 => Instruction(Op::Jsr, AddressingMode::Absolute),
+            0x28 => Instruction(Op::Plp, AddressingMode::Implicit),
+            0x29 => Instruction(Op::And, AddressingMode::Immediate),
             0x31 => Instruction(Op::And, AddressingMode::IndirectY),
+            0x48 => Instruction(Op::Pha, AddressingMode::Implicit),
             0x4c => Instruction(Op::Jmp, AddressingMode::Absolute),
+            0x5d => Instruction(Op::Eor, AddressingMode::AbsoluteX),
             0x60 => Instruction(Op::Rts, AddressingMode::Implicit),
+            0x68 => Instruction(Op::Pla, AddressingMode::Implicit),
             0x78 => Instruction(Op::Sei, AddressingMode::Implicit),
+            0x84 => Instruction(Op::Sty, AddressingMode::ZeroPage),
             0x85 => Instruction(Op::Sta, AddressingMode::ZeroPage),
+            0x86 => Instruction(Op::Stx, AddressingMode::ZeroPage),
+            0x8a => Instruction(Op::Txa, AddressingMode::Implicit),
             0x8d => Instruction(Op::Sta, AddressingMode::Absolute),
+            0x90 => Instruction(Op::Bcc, AddressingMode::Relative),
             0x94 => Instruction(Op::Sty, AddressingMode::ZeroPageX),
+            0x95 => Instruction(Op::Sta, AddressingMode::ZeroPageX),
             0x9a => Instruction(Op::Txs, AddressingMode::Implicit),
             0x9d => Instruction(Op::Sta, AddressingMode::AbsoluteX),
             0x10 => Instruction(Op::Bpl, AddressingMode::Immediate),
+            0xa0 => Instruction(Op::Ldy, AddressingMode::Immediate),
             0xa2 => Instruction(Op::Ldx, AddressingMode::Immediate),
             0xa5 => Instruction(Op::Lda, AddressingMode::ZeroPage),
             0xa6 => Instruction(Op::Ldx, AddressingMode::ZeroPage),
             0xa9 => Instruction(Op::Lda, AddressingMode::Immediate),
+            0xaa => Instruction(Op::Tax, AddressingMode::Implicit),
             0xad => Instruction(Op::Lda, AddressingMode::Absolute),
+            0xb0 => Instruction(Op::Bcs, AddressingMode::Relative),
+            0xb9 => Instruction(Op::Lda, AddressingMode::AbsoluteY),
             0xbd => Instruction(Op::Lda, AddressingMode::AbsoluteX),
             0xc4 => Instruction(Op::Cpy, AddressingMode::ZeroPage),
+            0xc5 => Instruction(Op::Cmp, AddressingMode::ZeroPage),
             0xc9 => Instruction(Op::Cmp, AddressingMode::Immediate),
             0xca => Instruction(Op::Dex, AddressingMode::Implicit),
             0xd0 => Instruction(Op::Bne, AddressingMode::Relative),
+            0xdd => Instruction(Op::Cmp, AddressingMode::AbsoluteX),
             0xe0 => Instruction(Op::Cpx, AddressingMode::Immediate),
+            0xe4 => Instruction(Op::Cpx, AddressingMode::ZeroPage),
             0xe6 => Instruction(Op::Inc, AddressingMode::ZeroPage),
+            0xe9 => Instruction(Op::Sbc, AddressingMode::Immediate),
             0xf0 => Instruction(Op::Beq, AddressingMode::Relative),
             opcode => panic!("Unimplemented instruction: {:x}", opcode),
         }
@@ -178,7 +196,7 @@ impl Cpu {
             Op::Jmp => with_addr!(|addr| self.jmp(addr)),
             Op::Ldx => with_value!(|value| self.ldx(value)),
             Op::Txs => self.txs(),
-            Op::Bpl => with_value!(|value| self.bpl(value)),
+            Op::Bpl => with_addr!(|addr| self.bpl(addr)),
             Op::And => with_value!(|value| self.and(value)),
             Op::Sty => with_addr!(|addr| self.sty(interconnect, addr)),
             Op::Jsr => with_addr!(|addr| self.jsr(interconnect, addr)),
@@ -191,6 +209,19 @@ impl Cpu {
             Op::Cmp => with_value!(|value| self.cmp(value)),
             Op::Bne => with_addr!(|addr| self.bne(addr)),
             Op::Dex => self.dex(),
+            Op::Eor => with_value!(|value| self.eor(value)),
+            Op::Php => self.php(interconnect),
+            Op::Pha => self.pha(interconnect),
+            Op::Txa => self.txa(),
+            Op::Bcc => with_addr!(|addr| self.bcc(addr)),
+            Op::Sbc => with_value!(|value| self.sbc(value)),
+            Op::Tax => self.tax(),
+            Op::Pla => self.pla(interconnect),
+            Op::Plp => self.plp(interconnect),
+            Op::Ldy => with_value!(|value| self.ldy(value)),
+            Op::Bcs => with_addr!(|addr| self.bcs(addr)),
+            Op::Stx => with_addr!(|addr| self.stx(interconnect, addr)),
+            Op::Brk => self.brk(interconnect),
             _ => panic!("Unimplemented operation: {:?}", op),
         }
     }
@@ -200,6 +231,7 @@ impl Cpu {
             AddressingMode::Immediate => self.read_pc(interconnect),
             AddressingMode::Absolute |
             AddressingMode::AbsoluteX |
+            AddressingMode::AbsoluteY |
             AddressingMode::ZeroPage |
             AddressingMode::IndirectY => {
                 let addr = self.addr_for(interconnect, am);
@@ -228,6 +260,9 @@ impl Cpu {
             }
             AddressingMode::AbsoluteX => {
                 self.addr_for(interconnect, AddressingMode::Absolute) + self.x as u16
+            }
+            AddressingMode::AbsoluteY => {
+                self.addr_for(interconnect, AddressingMode::Absolute) + self.y as u16
             }
             AddressingMode::Relative => self.read_pc(interconnect) as u16 + self.pc,
             _ => panic!("Unimplemented addressing mode: {:?}", am),
@@ -330,6 +365,18 @@ impl Cpu {
         self.a = self.set_zn(a & value);
     }
 
+    fn bcc(&mut self, addr: u16) {
+        if !self.carry_flag() {
+            self.pc = addr;
+        }
+    }
+
+    fn bcs(&mut self, addr: u16) {
+        if self.carry_flag() {
+            self.pc = addr;
+        }
+    }
+
     fn beq(&mut self, addr: u16) {
         if self.zero_flag() {
             self.pc = addr;
@@ -342,10 +389,19 @@ impl Cpu {
         }
     }
 
-    fn bpl(&mut self, offset: u8) {
+    fn bpl(&mut self, addr: u16) {
         if !self.negative_flag() {
-            self.pc += offset as u16;
+            self.pc = addr;
         }
+    }
+
+    fn brk(&mut self, interconnect: &mut Interconnect) {
+        let pc = self.pc;
+        self.push_double(interconnect, pc);
+        let p = self.p;
+        self.push_word(interconnect, p);
+        self.pc = interconnect.read_double(0xfffe);
+        self.set_break_command(true);
     }
 
     fn cmp(&mut self, value: u8) {
@@ -366,6 +422,11 @@ impl Cpu {
     fn dex(&mut self) {
         let x = self.x;
         self.x = self.set_zn(x - 1);
+    }
+
+    fn eor(&mut self, value: u8) {
+        let a = self.a;
+        self.a = self.set_zn(a ^ value);
     }
 
     fn inc(&mut self, interconnect: &mut Interconnect, addr: u16) {
@@ -391,13 +452,46 @@ impl Cpu {
         self.x = self.set_zn(value);
     }
 
+    fn ldy(&mut self, value: u8) {
+        self.y = self.set_zn(value);
+    }
+
     fn ora(&mut self, value: u8) {
         let a = self.a;
         self.a = self.set_zn(a | value);
     }
 
+    fn pha(&mut self, interconnect: &mut Interconnect) {
+        let a = self.a;
+        self.push_word(interconnect, a);
+    }
+
+    fn php(&mut self, interconnect: &mut Interconnect) {
+        let p = self.p;
+        self.push_word(interconnect, p);
+    }
+
+    fn pla(&mut self, interconnect: &mut Interconnect) {
+        self.a = self.pop_word(interconnect);
+    }
+
+    fn plp(&mut self, interconnect: &mut Interconnect) {
+        self.p = self.pop_word(interconnect);
+    }
+
     fn rts(&mut self, interconnect: &mut Interconnect) {
         self.pc = self.pop_double(interconnect) + 1;
+    }
+
+    fn sbc(&mut self, value: u8) {
+        let a = self.a;
+        let carry_flag = if self.carry_flag() { 0 } else { 1 };
+        let (result, carry) = a.overflowing_sub(value);
+        let (result, carry2) = result.overflowing_sub(carry_flag);
+
+        self.a = self.set_zn(result);
+        self.set_overflow_flag(((a ^ value) & 0x08 == 0x08) && ((a ^ result) & 0x08 == 0x08));
+        self.set_carry_flag(!(carry || carry2));
     }
 
     fn sei(&mut self) {
@@ -412,13 +506,37 @@ impl Cpu {
         interconnect.write_word(addr, self.y);
     }
 
+    fn stx(&self, interconnect: &mut Interconnect, addr: u16) {
+        interconnect.write_word(addr, self.x);
+    }
+
+    fn tax(&mut self) {
+        let a = self.a;
+        self.x = self.set_zn(a);
+    }
+
+    fn txa(&mut self) {
+        let x = self.x;
+        self.a = self.set_zn(x);
+    }
+
     fn txs(&mut self) {
         self.sp = self.x;
+    }
+
+    fn push_word(&mut self, interconnect: &mut Interconnect, value: u8) {
+        interconnect.write_word(0x100 + self.sp as u16 - 1, value);
+        self.sp -= 1;
     }
 
     fn push_double(&mut self, interconnect: &mut Interconnect, value: u16) {
         interconnect.write_double(0x100 + self.sp as u16 - 1, value);
         self.sp -= 2;
+    }
+
+    fn pop_word(&mut self, interconnect: &mut Interconnect) -> u8 {
+        self.sp += 1;
+        interconnect.read_word(0x100 + self.sp as u16 - 1)
     }
 
     fn pop_double(&mut self, interconnect: &mut Interconnect) -> u16 {
