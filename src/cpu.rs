@@ -274,6 +274,12 @@ impl Cpu {
         };
     }
 
+    fn set_zn(&mut self, value: u8) -> u8 {
+        self.set_zero_flag(value == 0);
+        self.set_negative_flag(value & 0b10000000 != 0);
+        value
+    }
+
     fn compare(&mut self, a: u8, b: u8) {
         self.set_zero_flag(a == b);
         self.set_negative_flag(a < b);
@@ -281,10 +287,8 @@ impl Cpu {
     }
 
     fn and(&mut self, value: u8) {
-        let new_a = self.a & value;
-        self.a = new_a;
-        self.set_zero_flag(new_a == 0);
-        self.set_negative_flag(new_a & 0b10000000 != 0);
+        let a = self.a;
+        self.a = self.set_zn(a & value);
     }
 
     fn beq(&mut self, addr: u16) {
@@ -321,16 +325,12 @@ impl Cpu {
     }
 
     fn dex(&mut self) {
-        self.x -= 1;
         let x = self.x;
-        self.set_zero_flag(x == 0);
-        self.set_negative_flag(x & 0b10000000 != 0);
+        self.x = self.set_zn(x - 1);
     }
 
     fn inc(&mut self, interconnect: &mut Interconnect, addr: u16) {
-        let value = interconnect.read_word(addr) + 1;
-        self.set_zero_flag(value == 0);
-        self.set_negative_flag(value & 0b10000000 != 0);
+        let value = self.set_zn(interconnect.read_word(addr) + 1);
         interconnect.write_word(addr, value);
     }
 
@@ -345,22 +345,16 @@ impl Cpu {
     }
 
     fn lda(&mut self, value: u8) {
-        self.a = value;
-        self.set_zero_flag(value == 0);
-        self.set_negative_flag(value & 0b10000000 != 0);
+        self.a = self.set_zn(value);
     }
 
     fn ldx(&mut self, value: u8) {
-        self.x = value;
-        self.set_zero_flag(value == 0);
-        self.set_negative_flag(value & 0b10000000 != 0);
+        self.x = self.set_zn(value);
     }
 
     fn ora(&mut self, value: u8) {
-        let new_a = self.a | value;
-        self.a = new_a;
-        self.set_zero_flag(new_a == 0);
-        self.set_negative_flag(new_a & 0b10000000 != 0);
+        let a = self.a;
+        self.a = self.set_zn(a | value);
     }
 
     fn rts(&mut self, interconnect: &mut Interconnect) {
