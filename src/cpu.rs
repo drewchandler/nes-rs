@@ -1,4 +1,5 @@
 use interconnect::Interconnect;
+use instruction::{Op, AddressingMode, Instruction};
 
 const CARRY_FLAG: u8 = 0x01;
 const ZERO_FLAG: u8 = 0x02;
@@ -15,86 +16,6 @@ pub struct Cpu {
     x: u8,
     y: u8,
 }
-
-#[derive(Debug)]
-enum AddressingMode {
-    Implicit,
-    Accumulator,
-    Immediate,
-    ZeroPage,
-    ZeroPageX,
-    ZeroPageY,
-    Relative,
-    Absolute,
-    AbsoluteX,
-    AbsoluteY,
-    Indirect,
-    IndirectX,
-    IndirectY,
-}
-
-#[derive(Debug)]
-enum Op {
-    Adc,
-    And,
-    Asl,
-    Bcc,
-    Bcs,
-    Beq,
-    Bit,
-    Bmi,
-    Bne,
-    Bpl,
-    Brk,
-    Bvc,
-    Bvs,
-    Clc,
-    Cld,
-    Cli,
-    Clv,
-    Cmp,
-    Cpx,
-    Cpy,
-    Dec,
-    Dex,
-    Dey,
-    Eor,
-    Inc,
-    Inx,
-    Iny,
-    Jmp,
-    Jsr,
-    Lda,
-    Ldx,
-    Ldy,
-    Lsr,
-    Nop,
-    Ora,
-    Pha,
-    Php,
-    Pla,
-    Plp,
-    Rol,
-    Ror,
-    Rti,
-    Rts,
-    Sbc,
-    Sec,
-    Sed,
-    Sei,
-    Sta,
-    Stx,
-    Sty,
-    Tax,
-    Tay,
-    Tsx,
-    Txa,
-    Txs,
-    Tya,
-}
-
-#[derive(Debug)]
-struct Instruction(Op, AddressingMode);
 
 impl Cpu {
     pub fn new() -> Cpu {
@@ -113,62 +34,8 @@ impl Cpu {
     }
 
     pub fn step(&mut self, interconnect: &mut Interconnect) {
-        let instruction = self.read_instruction(interconnect);
+        let instruction = Instruction::from_opcode(self.read_pc(interconnect));
         self.execute(interconnect, instruction)
-    }
-
-    fn read_instruction(&mut self, interconnect: &Interconnect) -> Instruction {
-        match self.read_pc(interconnect) {
-            0x00 => Instruction(Op::Brk, AddressingMode::Implicit),
-            0x01 => Instruction(Op::Ora, AddressingMode::IndirectX),
-            0x05 => Instruction(Op::Ora, AddressingMode::ZeroPage),
-            0x06 => Instruction(Op::Asl, AddressingMode::ZeroPage),
-            0x08 => Instruction(Op::Php, AddressingMode::Implicit),
-            0x09 => Instruction(Op::Ora, AddressingMode::Immediate),
-            0x20 => Instruction(Op::Jsr, AddressingMode::Absolute),
-            0x28 => Instruction(Op::Plp, AddressingMode::Implicit),
-            0x29 => Instruction(Op::And, AddressingMode::Immediate),
-            0x31 => Instruction(Op::And, AddressingMode::IndirectY),
-            0x48 => Instruction(Op::Pha, AddressingMode::Implicit),
-            0x4c => Instruction(Op::Jmp, AddressingMode::Absolute),
-            0x5d => Instruction(Op::Eor, AddressingMode::AbsoluteX),
-            0x60 => Instruction(Op::Rts, AddressingMode::Implicit),
-            0x68 => Instruction(Op::Pla, AddressingMode::Implicit),
-            0x78 => Instruction(Op::Sei, AddressingMode::Implicit),
-            0x84 => Instruction(Op::Sty, AddressingMode::ZeroPage),
-            0x85 => Instruction(Op::Sta, AddressingMode::ZeroPage),
-            0x86 => Instruction(Op::Stx, AddressingMode::ZeroPage),
-            0x8a => Instruction(Op::Txa, AddressingMode::Implicit),
-            0x8d => Instruction(Op::Sta, AddressingMode::Absolute),
-            0x90 => Instruction(Op::Bcc, AddressingMode::Relative),
-            0x94 => Instruction(Op::Sty, AddressingMode::ZeroPageX),
-            0x95 => Instruction(Op::Sta, AddressingMode::ZeroPageX),
-            0x9a => Instruction(Op::Txs, AddressingMode::Implicit),
-            0x9d => Instruction(Op::Sta, AddressingMode::AbsoluteX),
-            0x10 => Instruction(Op::Bpl, AddressingMode::Immediate),
-            0xa0 => Instruction(Op::Ldy, AddressingMode::Immediate),
-            0xa2 => Instruction(Op::Ldx, AddressingMode::Immediate),
-            0xa5 => Instruction(Op::Lda, AddressingMode::ZeroPage),
-            0xa6 => Instruction(Op::Ldx, AddressingMode::ZeroPage),
-            0xa9 => Instruction(Op::Lda, AddressingMode::Immediate),
-            0xaa => Instruction(Op::Tax, AddressingMode::Implicit),
-            0xad => Instruction(Op::Lda, AddressingMode::Absolute),
-            0xb0 => Instruction(Op::Bcs, AddressingMode::Relative),
-            0xb9 => Instruction(Op::Lda, AddressingMode::AbsoluteY),
-            0xbd => Instruction(Op::Lda, AddressingMode::AbsoluteX),
-            0xc4 => Instruction(Op::Cpy, AddressingMode::ZeroPage),
-            0xc5 => Instruction(Op::Cmp, AddressingMode::ZeroPage),
-            0xc9 => Instruction(Op::Cmp, AddressingMode::Immediate),
-            0xca => Instruction(Op::Dex, AddressingMode::Implicit),
-            0xd0 => Instruction(Op::Bne, AddressingMode::Relative),
-            0xdd => Instruction(Op::Cmp, AddressingMode::AbsoluteX),
-            0xe0 => Instruction(Op::Cpx, AddressingMode::Immediate),
-            0xe4 => Instruction(Op::Cpx, AddressingMode::ZeroPage),
-            0xe6 => Instruction(Op::Inc, AddressingMode::ZeroPage),
-            0xe9 => Instruction(Op::Sbc, AddressingMode::Immediate),
-            0xf0 => Instruction(Op::Beq, AddressingMode::Relative),
-            opcode => panic!("Unimplemented instruction: {:x}", opcode),
-        }
     }
 
     fn execute(&mut self, interconnect: &mut Interconnect, instruction: Instruction) {

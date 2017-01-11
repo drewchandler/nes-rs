@@ -1,5 +1,6 @@
 mod cpu;
 mod emulator;
+mod instruction;
 mod interconnect;
 mod mapper;
 mod nes;
