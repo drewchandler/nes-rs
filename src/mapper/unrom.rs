@@ -26,7 +26,10 @@ impl Mapper for Unrom {
         }
     }
 
-    fn write(&mut self, addr: u16, _: u8) {
-        self.active_bank = (addr & 0x000f) as usize;
+    fn write(&mut self, addr: u16, value: u8) {
+        match addr {
+            0x8000...0xffff => self.active_bank = value as usize % self.rom.prg_rom.len(),
+            _ => panic!("UNROM unimplemented write {:x} = {}", addr, value),
+        }
     }
 }
