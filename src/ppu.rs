@@ -1,4 +1,5 @@
-const VBLANK_FLAG: u8 = 0x80;
+const CTRL_NMI_FLAG: u8 = 0x80;
+const STATUS_VBLANK_FLAG: u8 = 0x80;
 
 pub struct Ppu {
     pub ctrl: u8,
@@ -24,7 +25,7 @@ impl Ppu {
 
         if self.scanline == 0 && self.cycle == 0 {
             self.set_vblank(false);
-        } else if self.scanline == 241 && self.cycle == 1 {
+        } else if self.scanline == 241 && self.cycle == 1 && self.nmi_flag() {
             self.set_vblank(true);
             vblank_occurred = true
         }
@@ -33,11 +34,15 @@ impl Ppu {
         vblank_occurred
     }
 
+    fn nmi_flag(&self) -> bool {
+        self.ctrl & CTRL_NMI_FLAG != 0
+    }
+
     fn set_vblank(&mut self, value: bool) {
         self.status = if value {
-            self.status | VBLANK_FLAG
+            self.status | STATUS_VBLANK_FLAG
         } else {
-            self.status & !VBLANK_FLAG
+            self.status & !STATUS_VBLANK_FLAG
         };
     }
 
