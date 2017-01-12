@@ -21,5 +21,14 @@ impl Nes {
 
     pub fn run_frame(&mut self) {
         self.cpu.step(&mut self.interconnect);
+
+        let mut vblank_occurred = false;
+        for _ in 0..6 {
+            vblank_occurred = vblank_occurred || self.interconnect.ppu.step();
+        }
+
+        if vblank_occurred {
+            self.cpu.nmi(&mut self.interconnect);
+        }
     }
 }

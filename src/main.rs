@@ -4,6 +4,7 @@ mod instruction;
 mod interconnect;
 mod mapper;
 mod nes;
+mod ppu;
 mod rom;
 
 use std::env;

@@ -33,6 +33,14 @@ impl Cpu {
         self.pc = interconnect.read_double(0xfffc);
     }
 
+    pub fn nmi(&mut self, interconnect: &mut Interconnect) {
+        let pc = self.pc;
+        self.push_double(interconnect, pc);
+        let p = self.p;
+        self.push_word(interconnect, p);
+        self.pc = interconnect.read_double(0xfffa);
+    }
+
     pub fn step(&mut self, interconnect: &mut Interconnect) {
         let Instruction(op, am) = Instruction::from_opcode(self.read_pc(interconnect));
         println!("Executing {:?} {:?}", op, am);

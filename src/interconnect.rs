@@ -1,16 +1,18 @@
 use rom::Rom;
 use mapper::Mapper;
 use mapper::unrom::Unrom;
+use ppu::Ppu;
 
 pub struct Interconnect {
     mapper: Box<Mapper>,
     ram: [u8; 2048],
+    pub ppu: Ppu,
 }
 
 enum MappedAddress {
     Ram(usize),
-    PpuControlRegister1,
-    PpuControlRegister2,
+    PpuControlRegister,
+    PpuMaskRegister,
     PpuStatusRegister,
     SprRamAddressRegister,
     SprRamIoRegister,
@@ -26,8 +28,8 @@ fn map_addr(addr: u16) -> MappedAddress {
         0x8000...0xffff => MappedAddress::PrgRom,
         0x2000...0x3fff => {
             match (addr - 0x2000) % 8 {
-                0 => MappedAddress::PpuControlRegister1,
-                1 => MappedAddress::PpuControlRegister2,
+                0 => MappedAddress::PpuControlRegister,
+                1 => MappedAddress::PpuMaskRegister,
                 2 => MappedAddress::PpuStatusRegister,
                 3 => MappedAddress::SprRamAddressRegister,
                 4 => MappedAddress::SprRamIoRegister,
@@ -51,6 +53,7 @@ impl Interconnect {
         Interconnect {
             mapper: Box::new(mapper),
             ram: [0; 2048],
+            ppu: Ppu::new(),
         }
     }
 
@@ -62,10 +65,7 @@ impl Interconnect {
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
-            MappedAddress::PpuStatusRegister => {
-                println!("WARNING: Reading from PPU Status Register is not implemented");
-                0
-            }
+            MappedAddress::PpuStatusRegister => self.ppu.status,
             _ => panic!("Reading from unimplemented memory address: {:x}", addr),
         }
     }
@@ -74,6 +74,8 @@ impl Interconnect {
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr] = value,
             MappedAddress::PrgRom => self.mapper.write(addr, value),
+            MappedAddress::PpuControlRegister => self.ppu.ctrl = value,
+            MappedAddress::PpuMaskRegister => self.ppu.mask = value,
             _ => {
                 println!("WARNING: Writing to unimplemented memory address: {:x}",
                          addr)
