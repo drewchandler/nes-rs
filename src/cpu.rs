@@ -24,7 +24,7 @@ impl Cpu {
             a: 0,
             p: 0,
             pc: 0,
-            sp: 0,
+            sp: 0xfd,
             x: 0,
             y: 0,
         }
