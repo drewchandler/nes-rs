@@ -71,6 +71,7 @@ impl Cpu {
             Op::Bcc => with_addr!(|addr| self.bcc(addr)),
             Op::Bcs => with_addr!(|addr| self.bcs(addr)),
             Op::Beq => with_addr!(|addr| self.beq(addr)),
+            Op::Bmi => with_addr!(|addr| self.bmi(addr)),
             Op::Bne => with_addr!(|addr| self.bne(addr)),
             Op::Bpl => with_addr!(|addr| self.bpl(addr)),
             Op::Brk => self.brk(interconnect),
@@ -299,6 +300,12 @@ impl Cpu {
 
     fn beq(&mut self, addr: u16) {
         if self.zero_flag() {
+            self.pc = addr;
+        }
+    }
+
+    fn bmi(&mut self, addr: u16) {
+        if self.negative_flag() {
             self.pc = addr;
         }
     }
@@ -703,9 +710,16 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_bmi() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x80] /* LDA #$80 */, vec![0x30, 0x04] /* BMI *+4 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.pc, RESET_ADDR + 8);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0x30, 0x04] /* BMI *+4 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.pc, RESET_ADDR + 4);
+                  });
     }
 
     #[test]
@@ -720,7 +734,6 @@ mod tests {
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.pc, RESET_ADDR + 8);
                   });
-
 
         test_prg!(vec![vec![0xa9, 0x80] /* LDA #$80 */, vec![0x10, 0x04] /* BPL *+4 */],
                   |_, cpu: Cpu| {
