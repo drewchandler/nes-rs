@@ -3,7 +3,14 @@ use mapper::Mapper;
 use mapper::unrom::Unrom;
 use ppu::Ppu;
 
-pub struct Interconnect {
+pub trait Interconnect {
+    fn read_double(&self, addr: u16) -> u16;
+    fn read_word(&self, addr: u16) -> u8;
+    fn write_word(&mut self, addr: u16, value: u8);
+    fn write_double(&mut self, addr: u16, value: u16);
+}
+
+pub struct MemoryMappingInterconnect {
     mapper: Box<Mapper>,
     ram: [u8; 2048],
     pub ppu: Ppu,
@@ -85,25 +92,27 @@ fn map_addr(addr: u16) -> MappedAddress {
     }
 }
 
-impl Interconnect {
-    pub fn new(rom: Rom) -> Interconnect {
+impl MemoryMappingInterconnect {
+    pub fn new(rom: Rom) -> MemoryMappingInterconnect {
         let mapper = match rom.mapper {
             2 => Unrom::new(rom),
             _ => panic!("Unimplemented mapper"),
         };
 
-        Interconnect {
+        MemoryMappingInterconnect {
             mapper: Box::new(mapper),
             ram: [0; 2048],
             ppu: Ppu::new(),
         }
     }
+}
 
-    pub fn read_double(&self, addr: u16) -> u16 {
+impl Interconnect for MemoryMappingInterconnect {
+    fn read_double(&self, addr: u16) -> u16 {
         ((self.read_word(addr + 1) as u16) << 8) + self.read_word(addr) as u16
     }
 
-    pub fn read_word(&self, addr: u16) -> u8 {
+    fn read_word(&self, addr: u16) -> u8 {
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
@@ -112,7 +121,7 @@ impl Interconnect {
         }
     }
 
-    pub fn write_word(&mut self, addr: u16, value: u8) {
+    fn write_word(&mut self, addr: u16, value: u8) {
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr] = value,
             MappedAddress::PrgRom => self.mapper.write(addr, value),
@@ -125,7 +134,7 @@ impl Interconnect {
         }
     }
 
-    pub fn write_double(&mut self, addr: u16, value: u16) {
+    fn write_double(&mut self, addr: u16, value: u16) {
         match map_addr(addr) {
             MappedAddress::Ram(addr) => {
                 self.ram[addr] = value as u8;

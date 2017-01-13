@@ -1,16 +1,16 @@
 use cpu::Cpu;
-use interconnect::Interconnect;
+use interconnect::MemoryMappingInterconnect;
 use rom::Rom;
 
 pub struct Nes {
-    pub interconnect: Interconnect,
+    pub interconnect: MemoryMappingInterconnect,
     pub cpu: Cpu,
 }
 
 impl Nes {
     pub fn new(rom: Rom) -> Nes {
         Nes {
-            interconnect: Interconnect::new(rom),
+            interconnect: MemoryMappingInterconnect::new(rom),
             cpu: Cpu::new(),
         }
     }
