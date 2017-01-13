@@ -124,6 +124,7 @@ impl Cpu {
             AddressingMode::AbsoluteX |
             AddressingMode::AbsoluteY |
             AddressingMode::ZeroPage |
+            AddressingMode::ZeroPageX |
             AddressingMode::IndirectY => {
                 let addr = self.addr_for(interconnect, am);
                 interconnect.read_word(addr)
