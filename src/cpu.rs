@@ -278,9 +278,9 @@ impl Cpu {
             let a = self.a;
             self.a = self.arithmetic_shift_left(a);
         } else {
-            let value = self.value_for(interconnect, &am);
-            let result = self.arithmetic_shift_left(value);
             let addr = self.addr_for(interconnect, &am);
+            let value = interconnect.read_word(addr);
+            let result = self.arithmetic_shift_left(value);
             interconnect.write_word(addr, result);
         }
     }
@@ -409,9 +409,9 @@ impl Cpu {
             let a = self.a;
             self.a = self.logical_shift_right(a);
         } else {
-            let value = self.value_for(interconnect, &am);
-            let result = self.logical_shift_right(value);
             let addr = self.addr_for(interconnect, &am);
+            let value = interconnect.read_word(addr);
+            let result = self.logical_shift_right(value);
             interconnect.write_word(addr, result);
         }
     }
@@ -647,9 +647,24 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_asl() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0x0e, 0x03, 0xc0, 0x04]],
+                  |interconnect: TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(0xc003), 8);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0x0e, 0x03, 0xc0, 0x40]],
+                  |interconnect: TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(0xc003), 0x80);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
+
+        test_prg!(vec![vec![0x0e, 0x03, 0xc0, 0x80]],
+                  |interconnect: TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(0xc003), 0);
+                      assert_eq!(cpu.p, CARRY_FLAG + ZERO_FLAG);
+                  });
     }
 
     #[test]
