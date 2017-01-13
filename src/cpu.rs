@@ -81,6 +81,7 @@ impl Cpu {
             Op::Cpy => with_value!(|value| self.cpy(value)),
             Op::Dec => with_addr!(|addr| self.dec(interconnect, addr)),
             Op::Dex => self.dex(),
+            Op::Dey => self.dey(),
             Op::Eor => with_value!(|value| self.eor(value)),
             Op::Inc => with_addr!(|addr| self.inc(interconnect, addr)),
             Op::Inx => self.inx(),
@@ -354,6 +355,11 @@ impl Cpu {
     fn dex(&mut self) {
         let x = self.x;
         self.x = self.set_zn(x.overflowing_sub(1).0);
+    }
+
+    fn dey(&mut self) {
+        let y = self.y;
+        self.y = self.set_zn(y.overflowing_sub(1).0);
     }
 
     fn eor(&mut self, value: u8) {
@@ -793,9 +799,30 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_dey() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa0, 0x02] /* LDY #$02 */, vec![0x88]], // DEY
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.y, 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa0, 0x00] /* LDY #$00 */, vec![0x88]], // DEY
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.y, 0xff);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
+
+        test_prg!(vec![vec![0xa0, 0x80] /* LDY #$80 */, vec![0x88]], // DEY
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.y, 0x7f);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa0, 0x01] /* LDY #$01 */, vec![0x88]], // DEY
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.y, 0);
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                  });
     }
 
     #[test]
