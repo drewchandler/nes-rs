@@ -47,6 +47,8 @@ enum MappedAddress {
     PapuDeltaModulationDataLengthRegister,
     SpriteDmaRegister,
     PapuSoundVerticalClockSignalRegister,
+    Joypad1,
+    Joypad2,
     PrgRom,
 }
 
@@ -88,6 +90,8 @@ fn map_addr(addr: u16) -> MappedAddress {
         0x4013 => MappedAddress::PapuDeltaModulationDataLengthRegister,
         0x4014 => MappedAddress::SpriteDmaRegister,
         0x4015 => MappedAddress::PapuSoundVerticalClockSignalRegister,
+        0x4016 => MappedAddress::Joypad1,
+        0x4017 => MappedAddress::Joypad2,
         _ => panic!("Unmappable address: {:x}", addr),
     }
 }
@@ -117,6 +121,8 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
             MappedAddress::PpuStatusRegister => self.ppu.status,
+            MappedAddress::Joypad1 => 0,
+            MappedAddress::Joypad2 => 0,
             _ => panic!("Reading from unimplemented memory address: {:x}", addr),
         }
     }
