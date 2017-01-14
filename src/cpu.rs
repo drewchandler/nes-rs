@@ -101,6 +101,8 @@ impl Cpu {
             Op::Php => self.php(interconnect),
             Op::Pla => self.pla(interconnect),
             Op::Plp => self.plp(interconnect),
+            Op::Rol => self.rol(interconnect, am),
+            Op::Rti => self.rti(interconnect),
             Op::Rts => self.rts(interconnect),
             Op::Sbc => with_value!(|value| self.sbc(value)),
             Op::Sec => self.sec(),
@@ -451,6 +453,23 @@ impl Cpu {
         self.p = self.pop_word(interconnect);
     }
 
+    fn rol(&mut self, interconnect: &mut Interconnect, am: AddressingMode) {
+        if let AddressingMode::Accumulator = am {
+            let a = self.a;
+            self.a = self.rotate_left(a);
+        } else {
+            let addr = self.addr_for(interconnect, &am);
+            let value = interconnect.read_word(addr);
+            let result = self.rotate_left(value);
+            interconnect.write_word(addr, result);
+        }
+    }
+
+    fn rti(&mut self, interconnect: &mut Interconnect) {
+        self.p = self.pop_word(interconnect);
+        self.pc = self.pop_double(interconnect);
+    }
+
     fn rts(&mut self, interconnect: &mut Interconnect) {
         self.pc = self.pop_double(interconnect) + 1;
     }
@@ -518,6 +537,12 @@ impl Cpu {
     fn logical_shift_right(&mut self, value: u8) -> u8 {
         self.set_carry_flag(value & 0x01 != 0);
         self.set_zn(value >> 1)
+    }
+
+    fn rotate_left(&mut self, value: u8) -> u8 {
+        let carry_flag = self.carry_flag();
+        self.set_carry_flag(value & 0x80 != 0);
+        self.set_zn((value << 1) + carry_flag as u8)
     }
 
     fn push_word(&mut self, interconnect: &mut Interconnect, value: u8) {
@@ -1204,9 +1229,26 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_rol() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x01] /* STA #$01 */, vec![0x2a] /* ROL A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 2);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0x38], // SEC
+                       vec![0xa9, 0x01], // STA #$01
+                       vec![0x2a] /* ROL A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 3);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x80] /* STA #$80 */, vec![0x2a] /* ROL A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0);
+                      assert_eq!(cpu.p, ZERO_FLAG + CARRY_FLAG);
+                  });
     }
 
     #[test]
@@ -1216,9 +1258,23 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_rti() {
-        assert!(false, "Write me");
+        let break_addr = RESET_ADDR + 13;
+        let l_break_vector = BREAK_VECTOR as u8;
+        let h_break_vector = (BREAK_VECTOR >> 8) as u8;
+
+        test_prg!(vec![vec![0xa9, break_addr as u8], // LDA #$xx,
+                       vec![0x8d, l_break_vector, h_break_vector], // STA $xxxx,
+                       vec![0xa9, (break_addr >> 8) as u8], // LDA #$xx,
+                       vec![0x8d, l_break_vector + 1, h_break_vector], // STA $xx,
+                       vec![0xa9, 0x00], // LDA #$00
+                       vec![0x00], // BRK
+                       vec![0xa9, 0x01], // LDA #$01
+                       vec![0x40] /* RTI */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                      assert_eq!(cpu.pc, 0xc00d);
+                  });
     }
 
     #[test]
