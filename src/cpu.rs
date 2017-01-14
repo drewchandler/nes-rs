@@ -360,7 +360,7 @@ impl Cpu {
     }
 
     fn dec(&mut self, interconnect: &mut Interconnect, addr: u16) {
-        let value = self.set_zn(interconnect.read_word(addr) - 1);
+        let value = self.set_zn(interconnect.read_word(addr).overflowing_sub(1).0);
         interconnect.write_word(addr, value);
     }
 
@@ -879,9 +879,38 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_dec() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x02], // LDA #$02
+                       vec![0x8d, 0x00, 0x20], // STA $2000
+                       vec![0xce, 0x00, 0x20]], // DEC $2000
+                  |interconnect: TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(0x2000), 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x00], // LDA #$00
+                       vec![0x8d, 0x00, 0x20], // STA $2000
+                       vec![0xce, 0x00, 0x20]], // DEC $2000
+                  |interconnect: TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(0x2000), 0xff);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x80], // LDA #$80
+                       vec![0x8d, 0x00, 0x20], // STA $2000
+                       vec![0xce, 0x00, 0x20]], // DEC $2000
+                  |interconnect: TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(0x2000), 0x7f);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x01], // LDA #$01
+                       vec![0x8d, 0x00, 0x20], // STA $2000
+                       vec![0xce, 0x00, 0x20]], // DEC $2000
+                  |interconnect: TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(0x2000), 0);
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                  });
     }
 
     #[test]
@@ -1103,9 +1132,24 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_lsr() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x02] /* LDA #$02 */, vec![0x4a] /* LSR A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x03] /* LDA #$03 */, vec![0x4a] /* LSR A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 1);
+                      assert_eq!(cpu.p, CARRY_FLAG);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0x4a] /* LSR A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0);
+                      assert_eq!(cpu.p, ZERO_FLAG + CARRY_FLAG);
+                  });
     }
 
     #[test]
@@ -1115,9 +1159,24 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_ora() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x02] /* LDA #$02 */, vec![0x09, 0x01] /* ORA #$01 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 3);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0xf0] /* LDA #$f0 */, vec![0x09, 0x0f] /* ORA #$0f */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0xff);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x00] /* LDA #$00 */, vec![0x09, 0x00] /* ORA #$00 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0);
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                  });
     }
 
     #[test]
