@@ -4,8 +4,8 @@ use mapper::unrom::Unrom;
 use ppu::Ppu;
 
 pub trait Interconnect {
-    fn read_double(&self, addr: u16) -> u16;
-    fn read_word(&self, addr: u16) -> u8;
+    fn read_double(&mut self, addr: u16) -> u16;
+    fn read_word(&mut self, addr: u16) -> u8;
     fn write_word(&mut self, addr: u16, value: u8);
     fn write_double(&mut self, addr: u16, value: u16);
 }
@@ -112,15 +112,15 @@ impl MemoryMappingInterconnect {
 }
 
 impl Interconnect for MemoryMappingInterconnect {
-    fn read_double(&self, addr: u16) -> u16 {
+    fn read_double(&mut self, addr: u16) -> u16 {
         ((self.read_word(addr + 1) as u16) << 8) + self.read_word(addr) as u16
     }
 
-    fn read_word(&self, addr: u16) -> u8 {
+    fn read_word(&mut self, addr: u16) -> u8 {
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
-            MappedAddress::PpuStatusRegister => self.ppu.status,
+            MappedAddress::PpuStatusRegister => self.ppu.read_status(),
             MappedAddress::Joypad1 => 0,
             MappedAddress::Joypad2 => 0,
             _ => panic!("Reading from unimplemented memory address: {:x}", addr),

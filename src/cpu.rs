@@ -35,7 +35,7 @@ impl Cpu {
         }
     }
 
-    pub fn reset(&mut self, interconnect: &Interconnect) {
+    pub fn reset(&mut self, interconnect: &mut Interconnect) {
         self.pc = interconnect.read_double(RESET_VECTOR);
     }
 
@@ -119,7 +119,7 @@ impl Cpu {
         }
     }
 
-    fn value_for(&mut self, interconnect: &Interconnect, am: &AddressingMode) -> u8 {
+    fn value_for(&mut self, interconnect: &mut Interconnect, am: &AddressingMode) -> u8 {
         match *am {
             AddressingMode::Immediate => self.read_pc(interconnect),
             AddressingMode::Absolute |
@@ -135,7 +135,7 @@ impl Cpu {
         }
     }
 
-    fn addr_for(&mut self, interconnect: &Interconnect, am: &AddressingMode) -> u16 {
+    fn addr_for(&mut self, interconnect: &mut Interconnect, am: &AddressingMode) -> u16 {
         match *am {
             AddressingMode::Absolute => {
                 let lower = self.read_pc(interconnect);
@@ -164,7 +164,7 @@ impl Cpu {
     }
 
 
-    fn read_pc(&mut self, interconnect: &Interconnect) -> u8 {
+    fn read_pc(&mut self, interconnect: &mut Interconnect) -> u8 {
         let value = interconnect.read_word(self.pc);
         self.pc += 1;
         value
@@ -585,11 +585,11 @@ mod tests {
     }
 
     impl Interconnect for TestInterconnect {
-        fn read_double(&self, addr: u16) -> u16 {
+        fn read_double(&mut self, addr: u16) -> u16 {
             ((self.read_word(addr + 1) as u16) << 8) + self.read_word(addr) as u16
         }
 
-        fn read_word(&self, addr: u16) -> u8 {
+        fn read_word(&mut self, addr: u16) -> u8 {
             self.mem[addr as usize]
         }
 
@@ -614,13 +614,13 @@ mod tests {
             for (i, v) in $prg.iter().flat_map(|cmd| cmd).enumerate() {
                 interconnect.write_word(RESET_ADDR + i as u16, *v);
             }
-            cpu.reset(&interconnect);
+            cpu.reset(&mut interconnect);
 
             for _ in $prg.iter() {
                 cpu.step(&mut interconnect);
             }
 
-            $verify(interconnect, cpu);
+            $verify(&mut interconnect, cpu);
         })
     }
 
@@ -684,19 +684,19 @@ mod tests {
     #[test]
     fn test_asl() {
         test_prg!(vec![vec![0x0e, 0x03, 0xc0, 0x04]],
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0xc003), 8);
                       assert_eq!(cpu.p, 0);
                   });
 
         test_prg!(vec![vec![0x0e, 0x03, 0xc0, 0x40]],
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0xc003), 0x80);
                       assert_eq!(cpu.p, NEGATIVE_FLAG);
                   });
 
         test_prg!(vec![vec![0x0e, 0x03, 0xc0, 0x80]],
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0xc003), 0);
                       assert_eq!(cpu.p, CARRY_FLAG + ZERO_FLAG);
                   });
@@ -799,7 +799,7 @@ mod tests {
         test_prg!(vec![vec![0xa2, 0xff], // LDX #$ff
                        vec![0x9a], // TXS
                        vec![0x00] /* BRK */],
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(cpu.pc, BREAK_ADDR);
                       assert_eq!(cpu.p, NEGATIVE_FLAG + BREAK_COMMAND);
                       assert_eq!(interconnect.read_double(STACK_END + 0xfe), RESET_ADDR + 4);
@@ -908,7 +908,7 @@ mod tests {
         test_prg!(vec![vec![0xa9, 0x02], // LDA #$02
                        vec![0x8d, 0x00, 0x20], // STA $2000
                        vec![0xce, 0x00, 0x20]], // DEC $2000
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0x2000), 1);
                       assert_eq!(cpu.p, 0);
                   });
@@ -916,7 +916,7 @@ mod tests {
         test_prg!(vec![vec![0xa9, 0x00], // LDA #$00
                        vec![0x8d, 0x00, 0x20], // STA $2000
                        vec![0xce, 0x00, 0x20]], // DEC $2000
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0x2000), 0xff);
                       assert_eq!(cpu.p, NEGATIVE_FLAG);
                   });
@@ -924,7 +924,7 @@ mod tests {
         test_prg!(vec![vec![0xa9, 0x80], // LDA #$80
                        vec![0x8d, 0x00, 0x20], // STA $2000
                        vec![0xce, 0x00, 0x20]], // DEC $2000
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0x2000), 0x7f);
                       assert_eq!(cpu.p, 0);
                   });
@@ -932,7 +932,7 @@ mod tests {
         test_prg!(vec![vec![0xa9, 0x01], // LDA #$01
                        vec![0x8d, 0x00, 0x20], // STA $2000
                        vec![0xce, 0x00, 0x20]], // DEC $2000
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0x2000), 0);
                       assert_eq!(cpu.p, ZERO_FLAG);
                   });
@@ -1018,7 +1018,7 @@ mod tests {
         test_prg!(vec![vec![0xa9, 0x01], // LDA #$01
                        vec![0x8d, 0x00, 0x20], // STA $2000
                        vec![0xee, 0x00, 0x20]], // INC $2000
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0x2000), 2);
                       assert_eq!(cpu.p, 0);
                   });
@@ -1026,7 +1026,7 @@ mod tests {
         test_prg!(vec![vec![0xa9, 0x7f], // LDA #$7f
                        vec![0x8d, 0x00, 0x20], // STA $2000
                        vec![0xee, 0x00, 0x20]], // INC $2000
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0x2000), 0x80);
                       assert_eq!(cpu.p, NEGATIVE_FLAG);
                   });
@@ -1034,7 +1034,7 @@ mod tests {
         test_prg!(vec![vec![0xa9, 0xff], // LDA #$ff
                        vec![0x8d, 0x00, 0x20], // STA $2000
                        vec![0xee, 0x00, 0x20]], // INC $2000
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(interconnect.read_word(0x2000), 0);
                       assert_eq!(cpu.p, ZERO_FLAG);
                   });
@@ -1095,7 +1095,7 @@ mod tests {
         test_prg!(vec![vec![0xa2, 0xff], // LDX #$ff
                        vec![0x9a], // TXS
                        vec![0x20, 0x00, 0x20] /* JSR $2000 */],
-                  |interconnect: TestInterconnect, cpu: Cpu| {
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
                       assert_eq!(cpu.pc, 0x2000);
                       assert_eq!(cpu.sp, 0xfd);
                       assert_eq!(interconnect.read_double(STACK_END + 0xfe), RESET_ADDR + 5);
@@ -1361,7 +1361,7 @@ mod tests {
     fn test_sta() {
         test_prg!(vec![vec![0xa9, 0x01], // LDA #$01
                        vec![0x8d, 0x00, 0x20] /* STA $2000 */],
-                  |interconnect: TestInterconnect, _| {
+                  |interconnect: &mut TestInterconnect, _| {
                       assert_eq!(interconnect.read_word(0x2000), 1);
                   });
     }
@@ -1370,7 +1370,7 @@ mod tests {
     fn test_stx() {
         test_prg!(vec![vec![0xa2, 0x01], // LDX #$01
                        vec![0x8e, 0x00, 0x20] /* STX $2000 */],
-                  |interconnect: TestInterconnect, _| {
+                  |interconnect: &mut TestInterconnect, _| {
                       assert_eq!(interconnect.read_word(0x2000), 1);
                   });
     }
@@ -1379,7 +1379,7 @@ mod tests {
     fn test_sty() {
         test_prg!(vec![vec![0xa0, 0x01], // LDY #$01
                        vec![0x8c, 0x00, 0x20] /* STY $2000 */],
-                  |interconnect: TestInterconnect, _| {
+                  |interconnect: &mut TestInterconnect, _| {
                       assert_eq!(interconnect.read_word(0x2000), 1);
                   });
     }

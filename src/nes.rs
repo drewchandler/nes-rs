@@ -16,7 +16,7 @@ impl Nes {
     }
 
     pub fn reset(&mut self) {
-        self.cpu.reset(&self.interconnect);
+        self.cpu.reset(&mut self.interconnect);
     }
 
     pub fn run_frame(&mut self) {

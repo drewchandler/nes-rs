@@ -34,6 +34,12 @@ impl Ppu {
         vblank_occurred
     }
 
+    pub fn read_status(&mut self) -> u8 {
+        let status = self.status;
+        self.set_vblank(false);
+        status
+    }
+
     fn nmi_flag(&self) -> bool {
         self.ctrl & CTRL_NMI_FLAG != 0
     }
