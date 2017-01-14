@@ -112,6 +112,7 @@ impl Cpu {
             Op::Stx => with_addr!(|addr| self.stx(interconnect, addr)),
             Op::Sty => with_addr!(|addr| self.sty(interconnect, addr)),
             Op::Tax => self.tax(),
+            Op::Tay => self.tay(),
             Op::Txa => self.txa(),
             Op::Tya => self.tya(),
             Op::Txs => self.txs(),
@@ -513,6 +514,11 @@ impl Cpu {
     fn tax(&mut self) {
         let a = self.a;
         self.x = self.set_zn(a);
+    }
+
+    fn tay(&mut self) {
+        let a = self.a;
+        self.y = self.set_zn(a);
     }
 
     fn txa(&mut self) {
@@ -1385,15 +1391,45 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_tax() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0xaa] /* TAX */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.x, 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x80] /* LDA #$80 */, vec![0xaa] /* TAX */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.x, 0x80);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x00] /* LDA #$00 */, vec![0xaa] /* TAX */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.x, 0x00);
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                  });
     }
 
     #[test]
-    #[ignore]
     fn test_tay() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0xa8] /* TAY */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.y, 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x80] /* LDA #$80 */, vec![0xa8] /* TAY */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.y, 0x80);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x00] /* LDA #$00 */, vec![0xa8] /* TAY */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.y, 0x00);
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                  });
     }
 
     #[test]
