@@ -464,7 +464,7 @@ impl Cpu {
 
         self.a = self.set_zn(result);
         self.set_overflow_flag(((a ^ value) & 0x80 == 0x80) && ((a ^ result) & 0x80 == 0x80));
-        self.set_carry_flag(!(carry || carry2));
+        self.set_carry_flag(carry || carry2);
     }
 
     fn sec(&mut self) {
@@ -601,34 +601,26 @@ mod tests {
 
     #[test]
     fn test_adc() {
-        test_prg!(vec![vec![0x18], // CLC
-                       vec![0xa9, 0x01], // LDA #$01
-                       vec![0x69, 0x01] /* ADX #$01 */],
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0x69, 0x01] /* ADC #$01 */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.a, 2);
                       assert_eq!(cpu.p, 0);
                   });
 
 
-        test_prg!(vec![vec![0x18], // CLC
-                       vec![0xa9, 0x01], // LDA #$01
-                       vec![0x69, 0xff] /* ADX #$ff */],
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0x69, 0xff] /* ADC #$ff */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.a, 0);
                       assert_eq!(cpu.p, CARRY_FLAG + ZERO_FLAG);
                   });
 
-        test_prg!(vec![vec![0x18], // CLC
-                       vec![0xa9, 0x7f], // LDA #$7f
-                       vec![0x69, 0x01] /* ADX #$01 */],
+        test_prg!(vec![vec![0xa9, 0x7f] /* LDA #$7f */, vec![0x69, 0x01] /* ADC #$01 */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.a, 0x80);
                       assert_eq!(cpu.p, OVERFLOW_FLAG + NEGATIVE_FLAG);
                   });
 
-        test_prg!(vec![vec![0x18], // CLC
-                       vec![0xa9, 0x80], // LDA #$80
-                       vec![0x69, 0xff] /* ADX #$ff */],
+        test_prg!(vec![vec![0xa9, 0x80] /* LDA #$80 */, vec![0x69, 0xff] /* ADC #$ff */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.a, 0x7f);
                       assert_eq!(cpu.p, CARRY_FLAG + OVERFLOW_FLAG);
@@ -636,7 +628,7 @@ mod tests {
 
         test_prg!(vec![vec![0x38], // SEC
                        vec![0xa9, 0x00], // LDA #$00
-                       vec![0x69, 0x00] /* ADX #$00 */],
+                       vec![0x69, 0x00] /* ADC #$00 */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.a, 1);
                       assert_eq!(cpu.p, 0);
@@ -1183,9 +1175,50 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_sbc() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x03] /* LDA #$03 */, vec![0xe9, 0x01] /* SBC #$01 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x02] /* LDA #$02 */, vec![0xe9, 0x01] /* SBC #$01 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0);
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                  });
+
+        test_prg!(vec![vec![0x38], // SEC
+                       vec![0xa9, 0x02], // LDA #$02
+                       vec![0xe9, 0x01] /* SBC #$01 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0x38], // SEC
+                       vec![0xa9, 0x00], // LDA #$00
+                       vec![0xe9, 0x01] /* SBC #$01 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0xff);
+                      assert_eq!(cpu.p, CARRY_FLAG + NEGATIVE_FLAG);
+                  });
+
+        test_prg!(vec![vec![0x38], // SEC
+                       vec![0xa9, 0x80], // LDA #$80
+                       vec![0xe9, 0x01] /* SBC #$01 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0x7f);
+                      assert_eq!(cpu.p, OVERFLOW_FLAG);
+                  });
+
+        test_prg!(vec![vec![0x38], // SEC
+                       vec![0xa9, 0x7f], // LDA #$7f
+                       vec![0xe9, 0xff] /* SBC #$ff */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0x80);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG + OVERFLOW_FLAG + CARRY_FLAG);
+                  });
     }
 
     #[test]
@@ -1219,9 +1252,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_stx() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa2, 0x01], // LDX #$01
+                       vec![0x8e, 0x00, 0x20] /* STX $2000 */],
+                  |interconnect: TestInterconnect, _| {
+                      assert_eq!(interconnect.read_word(0x2000), 1);
+                  });
     }
 
     #[test]
@@ -1252,9 +1288,24 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_txa() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa2, 0x01] /* LDX #$01 */, vec![0x8a] /* TXA */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa2, 0x00] /* LDX #$00 */, vec![0x8a] /* TXA */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0);
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                  });
+
+        test_prg!(vec![vec![0xa2, 0x80] /* LDX #$80 */, vec![0x8a] /* TXA */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0x80);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
     }
 
     #[test]
@@ -1279,8 +1330,23 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_tya() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa0, 0x01] /* LDY #$01 */, vec![0x98] /* TYA */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 1);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa0, 0x00] /* LDY #$00 */, vec![0x98] /* TYA */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0);
+                      assert_eq!(cpu.p, ZERO_FLAG);
+                  });
+
+        test_prg!(vec![vec![0xa0, 0x80] /* LDY #$80 */, vec![0x98] /* TYA */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0x80);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
     }
 }
