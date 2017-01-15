@@ -74,6 +74,7 @@ impl Cpu {
             Op::Bcc => with_addr!(|addr| self.bcc(addr)),
             Op::Bcs => with_addr!(|addr| self.bcs(addr)),
             Op::Beq => with_addr!(|addr| self.beq(addr)),
+            Op::Bit => with_value!(|value| self.bit(value)),
             Op::Bmi => with_addr!(|addr| self.bmi(addr)),
             Op::Bne => with_addr!(|addr| self.bne(addr)),
             Op::Bpl => with_addr!(|addr| self.bpl(addr)),
@@ -323,6 +324,13 @@ impl Cpu {
         if self.zero_flag() {
             self.pc = addr;
         }
+    }
+
+    fn bit(&mut self, value: u8) {
+        let a = self.a;
+        self.set_zero_flag(a & value == 0);
+        self.set_overflow_flag(value & 0x40 != 0);
+        self.set_negative_flag(value & 0x80 != 0);
     }
 
     fn bmi(&mut self, addr: u16) {
@@ -773,9 +781,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_bit() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x0f], // LDA #$0f
+                       vec![0x2c, 0x05, 0xc0, 0x0f] /* BIT $c005 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x0f], // LDA #$0f
+                       vec![0x2c, 0x05, 0xc0, 0xf0] /* BIT $c005 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.p, ZERO_FLAG + OVERFLOW_FLAG + NEGATIVE_FLAG);
+                  });
     }
 
     #[test]
