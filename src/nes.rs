@@ -20,10 +20,10 @@ impl Nes {
     }
 
     pub fn run_frame(&mut self) {
-        self.cpu.step(&mut self.interconnect);
+        let cycles = self.cpu.step(&mut self.interconnect);
 
         let mut vblank_occurred = false;
-        for _ in 0..6 {
+        for _ in 0..cycles {
             vblank_occurred = vblank_occurred || self.interconnect.ppu.step();
         }
 

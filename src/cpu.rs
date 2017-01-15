@@ -14,6 +14,26 @@ pub const BREAK_VECTOR: u16 = 0xfffe;
 
 pub const STACK_END: u16 = 0x100;
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
+static CYCLES: [u8; 256] = [
+    7,6,2,8,3,3,5,5,3,2,2,2,4,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+    6,6,2,8,3,3,5,5,4,2,2,2,4,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+    6,6,2,8,3,3,5,5,3,2,2,2,3,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+    6,6,2,8,3,3,5,5,4,2,2,2,5,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+    2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,
+    2,6,2,6,4,4,4,4,2,5,2,5,5,5,5,5,
+    2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,
+    2,5,2,5,4,4,4,4,2,4,2,4,4,4,4,4,
+    2,6,2,8,3,3,5,5,2,2,2,2,4,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+    2,6,3,8,3,3,5,5,2,2,2,2,4,4,6,6,
+    2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
+];
+
 pub struct Cpu {
     pub a: u8,
     pub p: u8,
@@ -47,7 +67,7 @@ impl Cpu {
         self.pc = interconnect.read_double(0xfffa);
     }
 
-    pub fn step(&mut self, interconnect: &mut Interconnect) {
+    pub fn step(&mut self, interconnect: &mut Interconnect) -> u8 {
         let pc = self.pc;
         let opcode = self.read_pc(interconnect);
         let Instruction(op, am) = Instruction::from_opcode(opcode);
@@ -124,6 +144,8 @@ impl Cpu {
             Op::Txs => self.txs(),
             _ => panic!("Unimplemented operation: {:?}", op),
         }
+
+        CYCLES[opcode as usize]
     }
 
     fn value_for(&mut self, interconnect: &mut Interconnect, am: &AddressingMode) -> u8 {
