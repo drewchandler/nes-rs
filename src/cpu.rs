@@ -79,6 +79,8 @@ impl Cpu {
             Op::Bne => with_addr!(|addr| self.bne(addr)),
             Op::Bpl => with_addr!(|addr| self.bpl(addr)),
             Op::Brk => self.brk(interconnect),
+            Op::Bvc => with_addr!(|addr| self.bvc(addr)),
+            Op::Bvs => with_addr!(|addr| self.bvs(addr)),
             Op::Clc => self.clc(),
             Op::Cld => self.cld(),
             Op::Cli => self.cli(),
@@ -358,6 +360,18 @@ impl Cpu {
         self.push_word(interconnect, p);
         self.pc = interconnect.read_double(BREAK_VECTOR);
         self.set_break_command(true);
+    }
+
+    fn bvc(&mut self, addr: u16) {
+        if !self.overflow_flag() {
+            self.pc = addr;
+        }
+    }
+
+    fn bvs(&mut self, addr: u16) {
+        if self.overflow_flag() {
+            self.pc = addr;
+        }
     }
 
     fn clc(&mut self) {
@@ -852,15 +866,31 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_bvc() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0x50, 0x04] /* BVC *+4 */], |_, cpu: Cpu| {
+            assert_eq!(cpu.pc, RESET_ADDR + 6);
+        });
+
+        test_prg!(vec![vec![0xa9, 0x80], // LDA #$80
+                       vec![0x69, 0xff], // ADC #$ff
+                       vec![0x50, 0x04] /* BVC *+4 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.pc, RESET_ADDR + 6);
+                  });
     }
 
     #[test]
-    #[ignore]
     fn test_bvs() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0x70, 0x04] /* BVS *+4 */], |_, cpu: Cpu| {
+            assert_eq!(cpu.pc, RESET_ADDR + 2);
+        });
+
+        test_prg!(vec![vec![0xa9, 0x80], // LDA #$80
+                       vec![0x69, 0xff], // ADC #$ff
+                       vec![0x70, 0x04] /* BVS *+4 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.pc, RESET_ADDR + 10);
+                  });
     }
 
     #[test]
