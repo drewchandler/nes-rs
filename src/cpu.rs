@@ -98,6 +98,7 @@ impl Cpu {
             Op::Ldx => with_value!(|value| self.ldx(value)),
             Op::Ldy => with_value!(|value| self.ldy(value)),
             Op::Lsr => self.lsr(interconnect, am),
+            Op::Nop => {}
             Op::Ora => with_value!(|value| self.ora(value)),
             Op::Pha => self.pha(interconnect),
             Op::Php => self.php(interconnect),
@@ -1210,9 +1211,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_nop() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xea] /* NOP */], |_, cpu: Cpu| {
+            assert_eq!(cpu.pc, RESET_ADDR + 1);
+        });
     }
 
     #[test]
