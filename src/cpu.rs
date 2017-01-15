@@ -80,6 +80,8 @@ impl Cpu {
             Op::Brk => self.brk(interconnect),
             Op::Clc => self.clc(),
             Op::Cld => self.cld(),
+            Op::Cli => self.cli(),
+            Op::Clv => self.clv(),
             Op::Cmp => with_value!(|value| self.cmp(value)),
             Op::Cpx => with_value!(|value| self.cpx(value)),
             Op::Cpy => with_value!(|value| self.cpy(value)),
@@ -355,6 +357,14 @@ impl Cpu {
 
     fn cld(&mut self) {
         self.set_decimal_mode(false);
+    }
+
+    fn cli(&mut self) {
+        self.set_interrupt_disable(false);
+    }
+
+    fn clv(&mut self) {
+        self.set_overflow_flag(false);
     }
 
     fn cmp(&mut self, value: u8) {
@@ -852,15 +862,21 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_cli() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0x78] /* SEI */, vec![0x58] /* CLI */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.p, 0);
+                  });
     }
 
     #[test]
-    #[ignore]
     fn test_clv() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x80], // LDA #$80
+                       vec![0x69, 0xff], // ADC #$ff
+                       vec![0xb8] /* CLV */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.p, CARRY_FLAG);
+                  });
     }
 
     #[test]
