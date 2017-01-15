@@ -128,6 +128,7 @@ impl Cpu {
             AddressingMode::AbsoluteY |
             AddressingMode::ZeroPage |
             AddressingMode::ZeroPageX |
+            AddressingMode::Indirect |
             AddressingMode::IndirectX |
             AddressingMode::IndirectY => {
                 let addr = self.addr_for(interconnect, am);
@@ -143,6 +144,10 @@ impl Cpu {
                 let lower = self.read_pc(interconnect);
                 let higher = self.read_pc(interconnect);
                 ((higher as u16) << 8) + lower as u16
+            }
+            AddressingMode::Indirect => {
+                let addr = self.addr_for(interconnect, &AddressingMode::Absolute);
+                interconnect.read_double(addr)
             }
             AddressingMode::IndirectX => {
                 let zero_page_addr = self.read_pc(interconnect);
