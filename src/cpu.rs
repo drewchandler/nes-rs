@@ -128,6 +128,7 @@ impl Cpu {
             AddressingMode::AbsoluteY |
             AddressingMode::ZeroPage |
             AddressingMode::ZeroPageX |
+            AddressingMode::IndirectX |
             AddressingMode::IndirectY => {
                 let addr = self.addr_for(interconnect, am);
                 interconnect.read_word(addr)
@@ -142,6 +143,10 @@ impl Cpu {
                 let lower = self.read_pc(interconnect);
                 let higher = self.read_pc(interconnect);
                 ((higher as u16) << 8) + lower as u16
+            }
+            AddressingMode::IndirectX => {
+                let zero_page_addr = self.read_pc(interconnect);
+                interconnect.read_double(zero_page_addr.overflowing_add(self.x).0 as u16)
             }
             AddressingMode::IndirectY => {
                 let zero_page_addr = self.read_pc(interconnect);
