@@ -210,7 +210,10 @@ impl Cpu {
             AddressingMode::AbsoluteY => {
                 self.addr_for(interconnect, &AddressingMode::Absolute) + self.y as u16
             }
-            AddressingMode::Relative => self.read_pc(interconnect) as u16 + self.pc,
+            AddressingMode::Relative => {
+                let offset = self.read_pc(interconnect) as i8;
+                self.pc.overflowing_add(offset as u16).0
+            }
             _ => panic!("Unimplemented addressing mode: {:?}", am),
         }
     }
@@ -922,6 +925,11 @@ mod tests {
         test_prg!(vec![vec![0xa9, 0x80] /* LDA #$80 */, vec![0x10, 0x04] /* BPL *+4 */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.pc, RESET_ADDR + 4);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0x10, 0xfc] /* BPL *-4 */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.pc, RESET_ADDR);
                   });
     }
 
