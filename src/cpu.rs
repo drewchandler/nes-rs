@@ -130,6 +130,7 @@ impl Cpu {
             Op::Pla => self.pla(interconnect),
             Op::Plp => self.plp(interconnect),
             Op::Rol => self.rol(interconnect, am),
+            Op::Ror => self.ror(interconnect, am),
             Op::Rti => self.rti(interconnect),
             Op::Rts => self.rts(interconnect),
             Op::Sbc => with_value!(|value| self.sbc(value)),
@@ -151,7 +152,6 @@ impl Cpu {
             Op::Txa => self.txa(),
             Op::Tya => self.tya(),
             Op::Txs => self.txs(),
-            _ => panic!("Unimplemented operation: {:?}", op),
         }
 
         if dma_performed {
@@ -559,6 +559,18 @@ impl Cpu {
         }
     }
 
+    fn ror(&mut self, interconnect: &mut Interconnect, am: AddressingMode) {
+        if let AddressingMode::Accumulator = am {
+            let a = self.a;
+            self.a = self.rotate_right(a);
+        } else {
+            let addr = self.addr_for(interconnect, &am);
+            let value = interconnect.read_word(addr);
+            let result = self.rotate_right(value);
+            interconnect.write_word(addr, result);
+        }
+    }
+
     fn rti(&mut self, interconnect: &mut Interconnect) {
         self.p = self.pop_word(interconnect);
         self.pc = self.pop_double(interconnect);
@@ -647,6 +659,12 @@ impl Cpu {
         let carry_flag = self.carry_flag();
         self.set_carry_flag(value & 0x80 != 0);
         self.set_zn((value << 1) + carry_flag as u8)
+    }
+
+    fn rotate_right(&mut self, value: u8) -> u8 {
+        let carry_flag = self.carry_flag();
+        self.set_carry_flag(value & 0x01 != 0);
+        self.set_zn((value >> 1) + ((carry_flag as u8) << 7))
     }
 
     fn push_word(&mut self, interconnect: &mut Interconnect, value: u8) {
@@ -1382,21 +1400,21 @@ mod tests {
 
     #[test]
     fn test_rol() {
-        test_prg!(vec![vec![0xa9, 0x01] /* STA #$01 */, vec![0x2a] /* ROL A */],
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0x2a] /* ROL A */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.a, 2);
                       assert_eq!(cpu.p, 0);
                   });
 
         test_prg!(vec![vec![0x38], // SEC
-                       vec![0xa9, 0x01], // STA #$01
+                       vec![0xa9, 0x01], // LDA #$01
                        vec![0x2a] /* ROL A */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.a, 3);
                       assert_eq!(cpu.p, 0);
                   });
 
-        test_prg!(vec![vec![0xa9, 0x80] /* STA #$80 */, vec![0x2a] /* ROL A */],
+        test_prg!(vec![vec![0xa9, 0x80] /* LDA #$80 */, vec![0x2a] /* ROL A */],
                   |_, cpu: Cpu| {
                       assert_eq!(cpu.a, 0);
                       assert_eq!(cpu.p, ZERO_FLAG + CARRY_FLAG);
@@ -1404,9 +1422,26 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_ror() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0x04] /* LDA #$04 */, vec![0x6a] /* ROR A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 2);
+                      assert_eq!(cpu.p, 0);
+                  });
+
+        test_prg!(vec![vec![0xa9, 0x01] /* LDA #$01 */, vec![0x6a] /* ROR A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0);
+                      assert_eq!(cpu.p, CARRY_FLAG + ZERO_FLAG);
+                  });
+
+        test_prg!(vec![vec![0x38], // SEC
+                       vec![0xa9, 0x01], // LDA #$01
+                       vec![0x6a] /* ROR A */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0x80);
+                      assert_eq!(cpu.p, CARRY_FLAG + NEGATIVE_FLAG);
+                  });
     }
 
     #[test]
