@@ -15,7 +15,7 @@ pub const BREAK_VECTOR: u16 = 0xfffe;
 pub const STACK_END: u16 = 0x100;
 
 #[cfg_attr(rustfmt, rustfmt_skip)]
-static CYCLES: [u8; 256] = [
+static CYCLES: [u16; 256] = [
     7,6,2,8,3,3,5,5,3,2,2,2,4,4,6,6,
     2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
     6,6,2,8,3,3,5,5,4,2,2,2,4,4,6,6,
@@ -67,7 +67,7 @@ impl Cpu {
         self.pc = interconnect.read_double(0xfffa);
     }
 
-    pub fn step(&mut self, interconnect: &mut Interconnect) -> u8 {
+    pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
         let pc = self.pc;
         let opcode = self.read_pc(interconnect);
         let Instruction(op, am) = Instruction::from_opcode(opcode);
@@ -86,6 +86,8 @@ impl Cpu {
                 $f(addr)
             })
         }
+
+        let mut dma_performed = false;
 
         match op {
             Op::Adc => with_value!(|value| self.adc(value)),
@@ -134,9 +136,15 @@ impl Cpu {
             Op::Sec => self.sec(),
             Op::Sed => self.sed(),
             Op::Sei => self.sei(),
-            Op::Sta => with_addr!(|addr| self.sta(interconnect, addr)),
-            Op::Stx => with_addr!(|addr| self.stx(interconnect, addr)),
-            Op::Sty => with_addr!(|addr| self.sty(interconnect, addr)),
+            Op::Sta => {
+                dma_performed = with_addr!(|addr| self.sta(interconnect, addr));
+            }
+            Op::Stx => {
+                dma_performed = with_addr!(|addr| self.stx(interconnect, addr));
+            }
+            Op::Sty => {
+                dma_performed = with_addr!(|addr| self.sty(interconnect, addr));
+            }
             Op::Tax => self.tax(),
             Op::Tay => self.tay(),
             Op::Tsx => self.tsx(),
@@ -146,7 +154,11 @@ impl Cpu {
             _ => panic!("Unimplemented operation: {:?}", op),
         }
 
-        CYCLES[opcode as usize]
+        if dma_performed {
+            512 + CYCLES[opcode as usize]
+        } else {
+            CYCLES[opcode as usize]
+        }
     }
 
     fn value_for(&mut self, interconnect: &mut Interconnect, am: &AddressingMode) -> u8 {
@@ -208,6 +220,20 @@ impl Cpu {
         let value = interconnect.read_word(self.pc);
         self.pc += 1;
         value
+    }
+
+    fn write_word(&self, interconnect: &mut Interconnect, addr: u16, value: u8) -> bool {
+        if addr == 0x4014 {
+            let dma_start = (value as u16) << 8;
+            for addr in dma_start..dma_start + 256 {
+                let value = interconnect.read_word(addr);
+                interconnect.write_word(0x2004, value);
+            }
+            true
+        } else {
+            interconnect.write_word(addr, value);
+            false
+        }
     }
 
     fn carry_flag(&self) -> bool {
@@ -565,16 +591,16 @@ impl Cpu {
         self.set_interrupt_disable(true);
     }
 
-    fn sta(&self, interconnect: &mut Interconnect, addr: u16) {
-        interconnect.write_word(addr, self.a);
+    fn sta(&self, interconnect: &mut Interconnect, addr: u16) -> bool {
+        self.write_word(interconnect, addr, self.a)
     }
 
-    fn sty(&self, interconnect: &mut Interconnect, addr: u16) {
-        interconnect.write_word(addr, self.y);
+    fn sty(&self, interconnect: &mut Interconnect, addr: u16) -> bool {
+        self.write_word(interconnect, addr, self.y)
     }
 
-    fn stx(&self, interconnect: &mut Interconnect, addr: u16) {
-        interconnect.write_word(addr, self.x);
+    fn stx(&self, interconnect: &mut Interconnect, addr: u16) -> bool {
+        self.write_word(interconnect, addr, self.x)
     }
 
     fn tax(&mut self) {
