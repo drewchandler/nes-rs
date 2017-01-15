@@ -139,6 +139,7 @@ impl Cpu {
             Op::Sty => with_addr!(|addr| self.sty(interconnect, addr)),
             Op::Tax => self.tax(),
             Op::Tay => self.tay(),
+            Op::Tsx => self.tsx(),
             Op::Txa => self.txa(),
             Op::Tya => self.tya(),
             Op::Txs => self.txs(),
@@ -584,6 +585,11 @@ impl Cpu {
     fn tay(&mut self) {
         let a = self.a;
         self.y = self.set_zn(a);
+    }
+
+    fn tsx(&mut self) {
+        let sp = self.sp;
+        self.x = self.set_zn(sp);
     }
 
     fn txa(&mut self) {
@@ -1530,9 +1536,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_tsx() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xba]], |_, cpu: Cpu| {
+            assert_eq!(cpu.x, 0xfd);
+            assert_eq!(cpu.p, NEGATIVE_FLAG);
+        });
     }
 
     #[test]
