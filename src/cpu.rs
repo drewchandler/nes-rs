@@ -539,7 +539,8 @@ impl Cpu {
     }
 
     fn pla(&mut self, interconnect: &mut Interconnect) {
-        self.a = self.pop_word(interconnect);
+        let a = self.pop_word(interconnect);
+        self.a = self.set_zn(a);
     }
 
     fn plp(&mut self, interconnect: &mut Interconnect) {
@@ -1340,27 +1341,43 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn test_pha() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0xff] /* LDA #$ff */, vec![0x48] /* PHA */],
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(STACK_END + cpu.sp as u16 + 1), 0xff);
+                  });
     }
 
     #[test]
-    #[ignore]
     fn test_php() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0xff] /* LDA #$ff */, vec![0x08] /* PHP */],
+                  |interconnect: &mut TestInterconnect, cpu: Cpu| {
+                      assert_eq!(interconnect.read_word(STACK_END + cpu.sp as u16 + 1),
+                                 NEGATIVE_FLAG);
+                  });
     }
 
     #[test]
-    #[ignore]
     fn test_pla() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0xff], // LDA #$ff
+                       vec![0x48], // PHA
+                       vec![0xa9, 0x00], // LDA #$00
+                       vec![0x68] /* PLA */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.a, 0xff);
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
     }
 
     #[test]
-    #[ignore]
     fn test_plp() {
-        assert!(false, "Write me");
+        test_prg!(vec![vec![0xa9, 0xff], // LDA #$ff
+                       vec![0x08], // PHP
+                       vec![0xa9, 0x00], // LDA #$00
+                       vec![0x28] /* PLP */],
+                  |_, cpu: Cpu| {
+                      assert_eq!(cpu.p, NEGATIVE_FLAG);
+                  });
     }
 
     #[test]
