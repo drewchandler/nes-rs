@@ -22,12 +22,12 @@ impl Nes {
     pub fn run_frame(&mut self) {
         let cycles = self.cpu.step(&mut self.interconnect);
 
-        let mut vblank_occurred = false;
+        let mut nmi = false;
         for _ in 0..cycles {
-            vblank_occurred = vblank_occurred || self.interconnect.ppu.step();
+            nmi = nmi || self.interconnect.ppu.step();
         }
 
-        if vblank_occurred {
+        if nmi {
             self.cpu.nmi(&mut self.interconnect);
         }
     }

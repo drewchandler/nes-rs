@@ -15,23 +15,26 @@ impl Ppu {
             ctrl: 0,
             mask: 0,
             status: 0,
+            vram: [0; 16384],
             scanline: -1,
             cycle: 0,
         }
     }
 
     pub fn step(&mut self) -> bool {
-        let mut vblank_occurred = false;
+        let mut nmi = false;
 
-        if self.scanline == 0 && self.cycle == 0 {
+        if self.scanline == 261 && self.cycle == 0 {
             self.set_vblank(false);
-        } else if self.scanline == 241 && self.cycle == 1 && self.nmi_flag() {
+        } else if self.scanline == 241 && self.cycle == 1 {
             self.set_vblank(true);
-            vblank_occurred = true
+            if self.nmi_flag() {
+                nmi = true;
+            }
         }
 
         self.tick();
-        vblank_occurred
+        nmi
     }
 
     pub fn read_status(&mut self) -> u8 {
