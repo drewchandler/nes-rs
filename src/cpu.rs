@@ -35,12 +35,12 @@ static CYCLES: [u16; 256] = [
 ];
 
 pub struct Cpu {
-    pub a: u8,
-    pub p: u8,
-    pub pc: u16,
-    pub sp: u8,
-    pub x: u8,
-    pub y: u8,
+    a: u8,
+    p: u8,
+    pc: u16,
+    sp: u8,
+    x: u8,
+    y: u8,
 }
 
 impl Cpu {
