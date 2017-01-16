@@ -68,10 +68,8 @@ impl Cpu {
     }
 
     pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
-        let pc = self.pc;
         let opcode = self.read_pc(interconnect);
         let Instruction(op, am) = Instruction::from_opcode(opcode);
-        println!("PC: {:04x} {:?} {:?} ({:02x})", pc, op, am, opcode);
 
         macro_rules! with_value {
             ($f:expr) => ({
