@@ -23,8 +23,8 @@ enum MappedAddress {
     PpuStatusRegister,
     SprRamAddressRegister,
     SprRamIoRegister,
-    VramAddressRegister1,
-    VramAddressRegister2,
+    PpuScrollRegister,
+    VramAddressRegister,
     VramIoRegister,
     PapuPulse1ControlRegister,
     PapuPulse1RampControlRegister,
@@ -63,8 +63,8 @@ fn map_addr(addr: u16) -> MappedAddress {
                 2 => MappedAddress::PpuStatusRegister,
                 3 => MappedAddress::SprRamAddressRegister,
                 4 => MappedAddress::SprRamIoRegister,
-                5 => MappedAddress::VramAddressRegister1,
-                6 => MappedAddress::VramAddressRegister2,
+                5 => MappedAddress::PpuScrollRegister,
+                6 => MappedAddress::VramAddressRegister,
                 7 => MappedAddress::VramIoRegister,
                 _ => unreachable!(),
             }
@@ -133,6 +133,8 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::PrgRom => self.mapper.write(addr, value),
             MappedAddress::PpuControlRegister => self.ppu.ctrl = value,
             MappedAddress::PpuMaskRegister => self.ppu.mask = value,
+            MappedAddress::VramAddressRegister => self.ppu.set_addr(value),
+            MappedAddress::VramIoRegister => self.ppu.write_word(value),
             _ => {
                 println!("WARNING: Writing to unimplemented memory address: {:x}",
                          addr)
