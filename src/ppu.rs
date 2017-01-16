@@ -22,6 +22,20 @@ enum Latch {
     Low,
 }
 
+pub struct CycleResult {
+    pub end_frame: bool,
+    pub nmi: bool,
+}
+
+impl CycleResult {
+    fn new(end_frame: bool, nmi: bool) -> CycleResult {
+        CycleResult {
+            end_frame: end_frame,
+            nmi: nmi,
+        }
+    }
+}
+
 impl Ppu {
     pub fn new() -> Ppu {
         Ppu {
@@ -40,7 +54,7 @@ impl Ppu {
         }
     }
 
-    pub fn step(&mut self) -> bool {
+    pub fn step(&mut self) -> CycleResult {
         let mut nmi = false;
 
         if self.scanline == 261 && self.cycle == 0 {
@@ -52,8 +66,8 @@ impl Ppu {
             }
         }
 
-        self.tick();
-        nmi
+        let end_frame = self.tick();
+        CycleResult::new(end_frame, nmi)
     }
 
     pub fn read_status(&mut self) -> u8 {
@@ -123,7 +137,9 @@ impl Ppu {
         };
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self) -> bool {
+        let mut end_frame = false;
+
         self.cycle += 1;
 
         if self.cycle > 340 {
@@ -132,8 +148,11 @@ impl Ppu {
 
             if self.scanline > 261 {
                 self.scanline = 0;
+                end_frame = true;
             }
         }
+
+        end_frame
     }
 }
 

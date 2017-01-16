@@ -20,15 +20,25 @@ impl Nes {
     }
 
     pub fn run_frame(&mut self) {
-        let cycles = self.cpu.step(&mut self.interconnect);
+        let mut frame_in_progress = true;
 
-        let mut nmi = false;
-        for _ in 0..cycles {
-            nmi = nmi || self.interconnect.ppu.step();
+        while frame_in_progress {
+            let cycles = self.cpu.step(&mut self.interconnect);
+
+            for _ in 0..cycles {
+                let result = self.interconnect.ppu.step();
+
+                if result.nmi {
+                    self.cpu.nmi(&mut self.interconnect);
+                }
+
+                if result.end_frame {
+                    frame_in_progress = false;
+                }
+            }
+
         }
 
-        if nmi {
-            self.cpu.nmi(&mut self.interconnect);
-        }
+        println!("END FRAME");
     }
 }
