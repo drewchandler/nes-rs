@@ -1,3 +1,5 @@
+const PIXELS: usize = 256 * 224;
+
 pub const CTRL_INCR_FLAG: u8 = 0x02;
 const CTRL_NMI_FLAG: u8 = 0x80;
 const STATUS_VBLANK_FLAG: u8 = 0x80;
@@ -15,6 +17,7 @@ pub struct Ppu {
     vram_addr_latch: Latch,
     scanline: i16,
     cycle: u16,
+    pub screen: [u32; PIXELS],
 }
 
 enum Latch {
@@ -51,6 +54,7 @@ impl Ppu {
             vram_addr_latch: Latch::High,
             scanline: -1,
             cycle: 0,
+            screen: [0; PIXELS],
         }
     }
 

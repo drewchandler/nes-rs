@@ -1,6 +1,7 @@
 use cpu::Cpu;
 use interconnect::MemoryMappingInterconnect;
 use rom::Rom;
+use video_driver::VideoDriver;
 
 pub struct Nes {
     pub interconnect: MemoryMappingInterconnect,
@@ -19,7 +20,7 @@ impl Nes {
         self.cpu.reset(&mut self.interconnect);
     }
 
-    pub fn run_frame(&mut self) {
+    pub fn run_frame(&mut self, video_driver: &mut Box<VideoDriver>) {
         let mut frame_in_progress = true;
 
         while frame_in_progress {
@@ -36,9 +37,8 @@ impl Nes {
                     frame_in_progress = false;
                 }
             }
-
         }
 
-        println!("END FRAME");
+        video_driver.output_frame(&self.interconnect.ppu.screen);
     }
 }
