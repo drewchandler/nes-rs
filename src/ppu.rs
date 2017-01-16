@@ -6,11 +6,13 @@ pub struct Ppu {
     pub ctrl: u8,
     pub mask: u8,
     status: u8,
+    spr_ram: [u8; 256],
+    spr_addr: u8,
+    scroll: u16,
+    scroll_latch: Latch,
     vram: [u8; 16384],
     vram_addr: u16,
     vram_addr_latch: Latch,
-    spr_ram: [u8; 256],
-    spr_addr: u8,
     scanline: i16,
     cycle: u16,
 }
@@ -26,11 +28,13 @@ impl Ppu {
             ctrl: 0,
             mask: 0,
             status: 0,
+            spr_ram: [0; 256],
+            spr_addr: 0,
+            scroll: 0,
+            scroll_latch: Latch::High,
             vram: [0; 16384],
             vram_addr: 0,
             vram_addr_latch: Latch::High,
-            spr_ram: [0; 256],
-            spr_addr: 0,
             scanline: -1,
             cycle: 0,
         }
@@ -54,10 +58,12 @@ impl Ppu {
 
     pub fn read_status(&mut self) -> u8 {
         let status = self.status;
-        self.set_vblank(false);
 
+        self.set_vblank(false);
         self.vram_addr = 0;
         self.vram_addr_latch = Latch::High;
+        self.scroll = 0;
+        self.scroll_latch = Latch::High;
 
         status
     }
@@ -85,6 +91,16 @@ impl Ppu {
     pub fn write_spr_ram_data(&mut self, value: u8) {
         self.spr_ram[self.spr_addr as usize] = value;
         self.spr_addr = self.spr_addr.overflowing_add(1).0;
+    }
+
+    pub fn set_scroll(&mut self, value: u8) {
+        if let Latch::High = self.scroll_latch {
+            self.scroll_latch = Latch::Low;
+            self.scroll = (value as u16) << 8;
+        } else {
+            self.scroll_latch = Latch::High;
+            self.scroll += value as u16;
+        }
     }
 
     fn addr_increment(&self) -> u16 {
@@ -159,5 +175,17 @@ mod tests {
 
         assert_eq!(ppu.spr_ram[0x08 as usize], 0xff);
         assert_eq!(ppu.spr_ram[0x09 as usize], 0xfe);
+    }
+
+
+    #[test]
+    fn setting_scroll_position() {
+        let mut ppu = Ppu::new();
+
+        ppu.read_status();
+        ppu.set_scroll(0x21);
+        ppu.set_scroll(0x08);
+
+        assert_eq!(ppu.scroll, 0x2108);
     }
 }
