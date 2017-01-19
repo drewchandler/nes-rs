@@ -131,12 +131,12 @@ impl Interconnect for MemoryMappingInterconnect {
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr] = value,
             MappedAddress::PrgRom => self.mapper.write(addr, value),
-            MappedAddress::PpuControlRegister => self.ppu.ctrl = value,
-            MappedAddress::PpuMaskRegister => self.ppu.mask = value,
-            MappedAddress::SprRamAddressRegister => self.ppu.set_spr_ram_addr(value),
+            MappedAddress::PpuControlRegister => self.ppu.write_ctrl(value),
+            MappedAddress::PpuMaskRegister => self.ppu.write_mask(value),
+            MappedAddress::SprRamAddressRegister => self.ppu.write_spr_ram_addr(value),
             MappedAddress::SprRamIoRegister => self.ppu.write_spr_ram_data(value),
-            MappedAddress::PpuScrollRegister => self.ppu.set_scroll(value),
-            MappedAddress::VramAddressRegister => self.ppu.set_vram_addr(value),
+            MappedAddress::PpuScrollRegister => self.ppu.write_scroll(value),
+            MappedAddress::VramAddressRegister => self.ppu.write_vram_addr(value),
             MappedAddress::VramIoRegister => self.ppu.write_vram_data(value),
             _ => {
                 println!("WARNING: Writing to unimplemented memory address: {:x}",

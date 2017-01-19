@@ -11,7 +11,7 @@ pub struct MiniFBWindow {
 
 impl MiniFBWindow {
     pub fn new() -> MiniFBWindow {
-        MiniFBWindow { window: Window::new("NES", 256, 224, WindowOptions::default()).unwrap() }
+        MiniFBWindow { window: Window::new("NES", 256, 240, WindowOptions::default()).unwrap() }
     }
 }
 
