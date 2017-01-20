@@ -1,5 +1,7 @@
+mod instruction;
+
 use interconnect::Interconnect;
-use instruction::{Op, AddressingMode, Instruction};
+use self::instruction::{Op, AddressingMode, Instruction};
 
 pub const CARRY_FLAG: u8 = 0x01;
 pub const ZERO_FLAG: u8 = 0x02;

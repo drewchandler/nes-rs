@@ -2,7 +2,6 @@ extern crate minifb;
 
 mod cpu;
 mod emulator;
-mod instruction;
 mod interconnect;
 mod mapper;
 mod nes;
