@@ -26,7 +26,7 @@ impl Nes {
         while frame_in_progress {
             let cycles = self.cpu.step(&mut self.interconnect);
 
-            for _ in 0..cycles {
+            for _ in 0..cycles * 3 {
                 let result = self.interconnect.ppu.step();
 
                 if result.nmi {
