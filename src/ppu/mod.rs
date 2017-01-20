@@ -1,3 +1,7 @@
+mod vram;
+
+use self::vram::Vram;
+
 pub const CTRL_INCR_FLAG: u8 = 0x02;
 const CTRL_BACKGROUND_FLAG: u8 = 0x10;
 const CTRL_NMI_FLAG: u8 = 0x80;
@@ -39,7 +43,7 @@ pub struct Ppu {
     vram_addr: u16,
     tmp_vram_addr: u16,
     write_flag: bool,
-    vram: [u8; 16384],
+    vram: Vram,
     spr_ram: [u8; 256],
     pub screen: [u32; PIXELS],
     name_table_byte: u8,
@@ -62,7 +66,7 @@ impl Ppu {
             vram_addr: 0,
             tmp_vram_addr: 0,
             write_flag: false,
-            vram: [0; 16384],
+            vram: Vram::new(),
             spr_ram: [0; 256],
             screen: [0; PIXELS],
             name_table_byte: 0,
@@ -128,7 +132,7 @@ impl Ppu {
 
     pub fn write_vram_data(&mut self, value: u8) {
         let addr = self.vram_addr;
-        self.write_vram(addr, value);
+        self.vram.write(addr, value);
         self.incr_vram_addr();
     }
 
@@ -196,7 +200,7 @@ impl Ppu {
     fn render_pixel(&mut self) {
         let shift = 32 + (7 - self.scroll) * 4;
         let bg_color_addr = (0x3f00 | self.tile_data >> shift) as u16;
-        let bg_palette_index = self.read_vram(bg_color_addr);
+        let bg_palette_index = self.vram.read(bg_color_addr);
         let color = SYSTEM_PALETTE[(bg_palette_index % 64) as usize];
         self.screen[256 * self.scanline as usize + self.cycle as usize - 1] = color;
     }
@@ -228,28 +232,28 @@ impl Ppu {
 
     fn fetch_name_table_byte(&mut self) {
         let addr = 0x2000 | self.vram_addr & 0x0fff;
-        self.name_table_byte = self.read_vram(addr);
+        self.name_table_byte = self.vram.read(addr);
     }
 
     fn fetch_attribute_table_byte(&mut self) {
         let addr = 0x23C0 | (self.vram_addr & 0x0C00) | ((self.vram_addr >> 4) & 0x38) |
                    ((self.vram_addr >> 2) & 0x07);
         let shift = ((self.vram_addr >> 4) & 0x04) | (self.vram_addr & 0x02);
-        self.attribute_table_byte = ((self.read_vram(addr) >> shift) & 0x03) << 2;
+        self.attribute_table_byte = ((self.vram.read(addr) >> shift) & 0x03) << 2;
     }
 
     fn fetch_low_bg_tile_byte(&mut self) {
         let fine_y = (self.vram_addr >> 12) & 0x07;
         let tile = self.name_table_byte as u16;
         let addr = self.background_pattern_table() + tile * 16 + fine_y;
-        self.low_bg_tile_byte = self.read_vram(addr);
+        self.low_bg_tile_byte = self.vram.read(addr);
     }
 
     fn fetch_high_bg_tile_byte(&mut self) {
         let fine_y = (self.vram_addr >> 12) & 0x07;
         let tile = self.name_table_byte as u16;
         let addr = self.background_pattern_table() + tile * 16 + fine_y + 8;
-        self.high_bg_tile_byte = self.read_vram(addr);
+        self.high_bg_tile_byte = self.vram.read(addr);
     }
 
     fn push_tile_data(&mut self) {
@@ -347,24 +351,6 @@ impl Ppu {
             self.status & !STATUS_VBLANK_FLAG
         };
     }
-
-    fn read_vram(&self, addr: u16) -> u8 {
-        self.vram[self.map_addr(addr)]
-    }
-
-    fn write_vram(&mut self, addr: u16, value: u8) {
-        self.vram[self.map_addr(addr)] = value;
-    }
-
-    fn map_addr(&self, addr: u16) -> usize {
-        match addr {
-            0...0x2fff | 0x3f00...0x3f1f => addr as usize,
-            0x3000...0x3eff => addr as usize - 0x1000,
-            0x3f20...0x3fff => ((addr - 0x3f20) % 32 + 0x3f00) as usize,
-            0x4000...0xffff => self.map_addr(addr % 0x4000),
-            _ => panic!("UNIMPLEMENTED ADDR {:x}", addr),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -407,8 +393,8 @@ mod tests {
         ppu.write_vram_data(0xff);
         ppu.write_vram_data(0xfe);
 
-        assert_eq!(ppu.vram[0x2108], 0xff);
-        assert_eq!(ppu.vram[0x2109], 0xfe);
+        assert_eq!(ppu.vram.read(0x2108), 0xff);
+        assert_eq!(ppu.vram.read(0x2109), 0xfe);
 
         ppu.ctrl = ppu.ctrl | CTRL_INCR_FLAG;
         ppu.read_status();
@@ -417,8 +403,8 @@ mod tests {
         ppu.write_vram_data(0xaa);
         ppu.write_vram_data(0xab);
 
-        assert_eq!(ppu.vram[0x2108], 0xaa);
-        assert_eq!(ppu.vram[0x2108 + 32], 0xab);
+        assert_eq!(ppu.vram.read(0x2108), 0xaa);
+        assert_eq!(ppu.vram.read(0x2108 + 32), 0xab);
     }
 
     #[test]
