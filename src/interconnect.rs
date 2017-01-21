@@ -124,6 +124,7 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
             MappedAddress::PpuStatusRegister => self.ppu.read_status(),
+            MappedAddress::VramIoRegister => self.ppu.read_vram_data(),
             MappedAddress::Joypad1 => self.joypad1.read(),
             MappedAddress::Joypad2 => 0,
             _ => panic!("Reading from unimplemented memory address: {:x}", addr),

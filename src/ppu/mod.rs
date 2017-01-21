@@ -51,6 +51,7 @@ pub struct Ppu {
     low_bg_tile_byte: u8,
     high_bg_tile_byte: u8,
     tile_data: u64,
+    buffered_read: u8,
     cycle: u16,
     scanline: i16,
 }
@@ -74,6 +75,7 @@ impl Ppu {
             low_bg_tile_byte: 0,
             high_bg_tile_byte: 0,
             tile_data: 0,
+            buffered_read: 0,
             cycle: 0,
             scanline: -1,
         }
@@ -134,6 +136,17 @@ impl Ppu {
         let addr = self.vram_addr;
         self.vram.write(addr, value);
         self.incr_vram_addr();
+    }
+
+    pub fn read_vram_data(&mut self) -> u8 {
+        let value = self.buffered_read;
+
+        let addr = self.vram_addr;
+        self.buffered_read = self.vram.read(addr);
+
+        self.incr_vram_addr();
+
+        value
     }
 
     fn incr_vram_addr(&mut self) {
