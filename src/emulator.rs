@@ -1,25 +1,26 @@
 use nes::Nes;
 use rom::Rom;
-use video_driver::{VideoDriver, MiniFBWindow};
+use minifb::{Window, WindowOptions, Key};
 
 pub struct Emulator {
     nes: Nes,
-    video_driver: Box<VideoDriver>,
+    window: Window,
 }
 
 impl Emulator {
     pub fn new(rom: Rom) -> Emulator {
         Emulator {
             nes: Nes::new(rom),
-            video_driver: Box::new(MiniFBWindow::new()),
+            window: Window::new("NES", 256, 240, WindowOptions::default()).unwrap(),
         }
     }
 
     pub fn run(&mut self) {
         self.nes.reset();
 
-        while self.video_driver.is_open() {
-            self.nes.run_frame(&mut self.video_driver);
+        while self.window.is_open() {
+            let frame = self.nes.run_frame();
+            self.window.update_with_buffer(frame);
         }
     }
 }

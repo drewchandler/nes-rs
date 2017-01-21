@@ -7,7 +7,6 @@ mod mapper;
 mod nes;
 mod ppu;
 mod rom;
-mod video_driver;
 
 use std::env;
 
