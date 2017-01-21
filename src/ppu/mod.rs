@@ -144,49 +144,34 @@ impl Ppu {
     pub fn step(&mut self) -> CycleResult {
         let mut nmi = false;
 
-        match self.scanline {
-            -1 => {
-                if self.rendering_enabled() {
-                    self.fetch_data();
-
-                    if self.cycle >= 280 && self.cycle <= 304 {
-                        self.vram_addr = (self.vram_addr & 0x841F) | (self.tmp_vram_addr & 0x7BE0);
-                    }
-                }
-            }
-            0...239 => {
-                if self.rendering_enabled() {
-                    if self.cycle >= 1 && self.cycle <= 256 {
-                        self.render_pixel();
-                    }
-                    self.fetch_data();
+        if self.rendering_enabled() {
+            match self.scanline {
+                0...239 => {
+                    self.process_render_scanline();
+                    self.process_fetch_scanline();
 
                     if self.cycle == 257 {
                         self.vram_addr = (self.vram_addr & 0xFBE0) | (self.tmp_vram_addr & 0x041F);
                     }
                 }
-            }
-            241 => {
-                if self.cycle == 1 {
-                    self.set_vblank(true);
-                    if self.nmi_flag() {
-                        nmi = true;
-                    }
-                }
-            }
-            261 => {
-                if self.cycle == 1 {
-                    self.set_vblank(false);
-                }
-                if self.rendering_enabled() {
-                    self.fetch_data();
+                -1 | 261 => {
+                    self.process_fetch_scanline();
 
                     if self.cycle >= 280 && self.cycle <= 304 {
                         self.vram_addr = (self.vram_addr & 0x841F) | (self.tmp_vram_addr & 0x7BE0);
                     }
                 }
+                _ => {}
             }
-            _ => {}
+        }
+
+        if self.scanline == 261 && self.cycle == 1 {
+            self.set_vblank(false);
+        } else if self.scanline == 241 && self.cycle == 1 {
+            self.set_vblank(true);
+            if self.nmi_flag() {
+                nmi = true;
+            }
         }
 
         let end_frame = self.tick();
@@ -197,7 +182,11 @@ impl Ppu {
         self.display_background() || self.display_sprites()
     }
 
-    fn render_pixel(&mut self) {
+    fn process_render_scanline(&mut self) {
+        if self.cycle < 1 || self.cycle > 256 {
+            return;
+        }
+
         let shift = 32 + (7 - self.scroll) * 4;
         let bg_color_addr = (0x3f00 | self.tile_data >> shift) as u16;
         let bg_palette_index = self.vram.read(bg_color_addr);
@@ -205,7 +194,7 @@ impl Ppu {
         self.screen[256 * self.scanline as usize + self.cycle as usize - 1] = color;
     }
 
-    fn fetch_data(&mut self) {
+    fn process_fetch_scanline(&mut self) {
         match self.cycle {
             1...256 | 321...336 => self.fetch_bg_data(),
             257 => self.increment_y(),
