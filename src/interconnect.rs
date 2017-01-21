@@ -1,7 +1,8 @@
-use rom::Rom;
+use joypad::Joypad;
 use mapper::Mapper;
 use mapper::unrom::Unrom;
 use ppu::Ppu;
+use rom::Rom;
 
 pub trait Interconnect {
     fn read_double(&mut self, addr: u16) -> u16;
@@ -14,6 +15,7 @@ pub struct MemoryMappingInterconnect {
     mapper: Box<Mapper>,
     ram: [u8; 2048],
     pub ppu: Ppu,
+    pub joypad1: Joypad,
 }
 
 enum MappedAddress {
@@ -107,6 +109,7 @@ impl MemoryMappingInterconnect {
             mapper: Box::new(mapper),
             ram: [0; 2048],
             ppu: Ppu::new(),
+            joypad1: Joypad::new(),
         }
     }
 }
@@ -121,7 +124,7 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
             MappedAddress::PpuStatusRegister => self.ppu.read_status(),
-            MappedAddress::Joypad1 => 0,
+            MappedAddress::Joypad1 => self.joypad1.read(),
             MappedAddress::Joypad2 => 0,
             _ => panic!("Reading from unimplemented memory address: {:x}", addr),
         }
@@ -136,6 +139,7 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::SprRamAddressRegister => self.ppu.write_spr_ram_addr(value),
             MappedAddress::SprRamIoRegister => self.ppu.write_spr_ram_data(value),
             MappedAddress::PpuScrollRegister => self.ppu.write_scroll(value),
+            MappedAddress::Joypad1 => self.joypad1.strobe(),
             MappedAddress::VramAddressRegister => self.ppu.write_vram_addr(value),
             MappedAddress::VramIoRegister => self.ppu.write_vram_data(value),
             _ => {

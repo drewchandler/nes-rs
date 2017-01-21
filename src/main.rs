@@ -3,6 +3,7 @@ extern crate minifb;
 mod cpu;
 mod emulator;
 mod interconnect;
+mod joypad;
 mod mapper;
 mod nes;
 mod ppu;

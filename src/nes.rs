@@ -1,5 +1,6 @@
 use cpu::Cpu;
 use interconnect::MemoryMappingInterconnect;
+use joypad::ButtonState;
 use rom::Rom;
 
 pub struct Nes {
@@ -19,9 +20,10 @@ impl Nes {
         self.cpu.reset(&mut self.interconnect);
     }
 
-    pub fn run_frame(&mut self) -> &[u32; 256 * 240] {
-        let mut frame_in_progress = true;
+    pub fn run_frame(&mut self, joypad1_state: ButtonState) -> &[u32; 256 * 240] {
+        self.interconnect.joypad1.set_state(joypad1_state);
 
+        let mut frame_in_progress = true;
         while frame_in_progress {
             let cycles = self.cpu.step(&mut self.interconnect);
 
