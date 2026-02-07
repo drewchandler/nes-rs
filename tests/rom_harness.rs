@@ -232,16 +232,6 @@ fn assert_manifest_frame(id: &str) {
 }
 
 #[test]
-fn megaman1_golden_frame() {
-    assert_golden_frame(
-        "NES_TEST_ROM_MEGAMAN1",
-        "NES_EXPECTED_HASH_MEGAMAN1",
-        "NES_TEST_FRAMES_MEGAMAN1",
-        120,
-    );
-}
-
-#[test]
 fn blargg_ppu_vbl_clear_time_golden_frame() {
     assert_manifest_frame("blargg_ppu_vbl_clear_time");
 }

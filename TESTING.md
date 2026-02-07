@@ -18,10 +18,6 @@ computed hash.
 
 Environment variables:
 
-- `NES_TEST_ROM_MEGAMAN1`: path to Mega Man 1 ROM
-- `NES_EXPECTED_HASH_MEGAMAN1`: expected frame hash (hex, e.g. `0xdeadbeef`)
-- `NES_TEST_FRAMES_MEGAMAN1`: optional frame count (default: 120)
-
 For the blargg tests, `tests/roms.toml` defines ROM paths, SHA256 checks, and
 frame counts. You can override these with:
 
