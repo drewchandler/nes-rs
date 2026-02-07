@@ -435,7 +435,7 @@ impl Ppu {
                 (new_tile_data << 4) | (self.attribute_table_byte | high_byte | low_byte) as u64;
         }
 
-        self.tile_data = self.tile_data | new_tile_data;
+        self.tile_data |= new_tile_data;
     }
 
     fn increment_x(&mut self) {
@@ -582,7 +582,7 @@ mod tests {
         assert_eq!(ppu.vram.read(0x2108), 0xff);
         assert_eq!(ppu.vram.read(0x2109), 0xfe);
 
-        ppu.ctrl = ppu.ctrl | CTRL_INCR_FLAG;
+        ppu.ctrl |= CTRL_INCR_FLAG;
         ppu.read_status();
         ppu.write_vram_addr(0x21);
         ppu.write_vram_addr(0x08);
@@ -601,8 +601,8 @@ mod tests {
         ppu.write_spr_ram_data(0xff);
         ppu.write_spr_ram_data(0xfe);
 
-        assert_eq!(ppu.spr_ram[0x08 as usize], 0xff);
-        assert_eq!(ppu.spr_ram[0x09 as usize], 0xfe);
+        assert_eq!(ppu.spr_ram[0x08_usize], 0xff);
+        assert_eq!(ppu.spr_ram[0x09_usize], 0xfe);
     }
 
     #[test]

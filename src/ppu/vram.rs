@@ -68,7 +68,7 @@ impl Vram {
 
     fn normalize_addr(&self, addr: u16) -> u16 {
         let addr = addr % 0x4000;
-        if addr >= 0x3000 && addr <= 0x3eff {
+        if (0x3000..=0x3eff).contains(&addr) {
             addr - 0x1000
         } else {
             addr
@@ -93,7 +93,7 @@ impl Vram {
 
     fn map_palette_addr(addr: u16) -> usize {
         let mut idx = ((addr - 0x3f00) % 32) as usize;
-        if idx >= 0x10 && idx % 4 == 0 {
+        if idx >= 0x10 && idx.is_multiple_of(4) {
             idx -= 0x10;
         }
         idx
