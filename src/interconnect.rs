@@ -100,15 +100,23 @@ fn map_addr(addr: u16) -> MappedAddress {
 
 impl MemoryMappingInterconnect {
     pub fn new(rom: Rom) -> MemoryMappingInterconnect {
-        let mapper = match rom.mapper {
-            2 => Unrom::new(rom),
+        let Rom {
+            prg_rom,
+            chr_rom,
+            mapper,
+            mirroring,
+            chr_ram_size,
+        } = rom;
+
+        let mapper = match mapper {
+            2 => Unrom::new(prg_rom),
             _ => panic!("Unimplemented mapper"),
         };
 
         MemoryMappingInterconnect {
             mapper: Box::new(mapper),
             ram: [0; 2048],
-            ppu: Ppu::new(),
+            ppu: Ppu::new(chr_rom, chr_ram_size, mirroring),
             joypad1: Joypad::new(),
         }
     }
@@ -124,6 +132,7 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
             MappedAddress::PpuStatusRegister => self.ppu.read_status(),
+            MappedAddress::SprRamIoRegister => self.ppu.read_spr_ram_data(),
             MappedAddress::VramIoRegister => self.ppu.read_vram_data(),
             MappedAddress::Joypad1 => self.joypad1.read(),
             MappedAddress::Joypad2 => 0,

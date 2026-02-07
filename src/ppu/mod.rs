@@ -1,12 +1,17 @@
 mod vram;
 
 use self::vram::Vram;
+use rom::Mirroring;
 
 pub const CTRL_INCR_FLAG: u8 = 0x02;
+const CTRL_SPRITE_PATTERN_FLAG: u8 = 0x08;
 const CTRL_BACKGROUND_FLAG: u8 = 0x10;
+const CTRL_SPRITE_SIZE_FLAG: u8 = 0x20;
 const CTRL_NMI_FLAG: u8 = 0x80;
 const MASK_DISPLAY_BACKGROUND: u8 = 0x08;
 const MASK_DISPLAY_SPRITES: u8 = 0x10;
+const STATUS_SPRITE_OVERFLOW_FLAG: u8 = 0x20;
+const STATUS_SPRITE0_HIT_FLAG: u8 = 0x40;
 const STATUS_VBLANK_FLAG: u8 = 0x80;
 const PIXELS: usize = 256 * 240;
 
@@ -54,10 +59,21 @@ pub struct Ppu {
     buffered_read: u8,
     cycle: u16,
     scanline: i16,
+    nmi_queued: bool,
+    sprites: Vec<Sprite>,
+}
+
+#[derive(Clone, Copy)]
+struct Sprite {
+    y: u8,
+    tile: u8,
+    attr: u8,
+    x: u8,
+    index: u8,
 }
 
 impl Ppu {
-    pub fn new() -> Ppu {
+    pub fn new(chr_rom: Vec<u8>, chr_ram_size: usize, mirroring: Mirroring) -> Ppu {
         Ppu {
             ctrl: 0,
             mask: 0,
@@ -67,7 +83,7 @@ impl Ppu {
             vram_addr: 0,
             tmp_vram_addr: 0,
             write_flag: false,
-            vram: Vram::new(),
+            vram: Vram::new(chr_rom, chr_ram_size, mirroring),
             spr_ram: [0; 256],
             screen: [0; PIXELS],
             name_table_byte: 0,
@@ -78,6 +94,8 @@ impl Ppu {
             buffered_read: 0,
             cycle: 0,
             scanline: -1,
+            nmi_queued: false,
+            sprites: Vec::with_capacity(8),
         }
     }
 
@@ -91,8 +109,12 @@ impl Ppu {
     }
 
     pub fn write_ctrl(&mut self, value: u8) {
+        let prev_nmi = self.nmi_flag();
         self.ctrl = value;
         self.tmp_vram_addr = self.tmp_vram_addr & 0xf3ff | ((value as u16) & 0x03) << 10;
+        if !prev_nmi && self.nmi_flag() && self.status & STATUS_VBLANK_FLAG != 0 {
+            self.nmi_queued = true;
+        }
     }
 
     pub fn write_mask(&mut self, value: u8) {
@@ -106,6 +128,10 @@ impl Ppu {
     pub fn write_spr_ram_data(&mut self, value: u8) {
         self.spr_ram[self.spr_ram_addr as usize] = value;
         self.spr_ram_addr = self.spr_ram_addr.overflowing_add(1).0;
+    }
+
+    pub fn read_spr_ram_data(&self) -> u8 {
+        self.spr_ram[self.spr_ram_addr as usize]
     }
 
     pub fn write_scroll(&mut self, value: u8) {
@@ -139,10 +165,15 @@ impl Ppu {
     }
 
     pub fn read_vram_data(&mut self) -> u8 {
-        let value = self.buffered_read;
-
-        let addr = self.vram_addr;
-        self.buffered_read = self.vram.read(addr);
+        let addr = self.vram_addr % 0x4000;
+        let value = if addr >= 0x3f00 {
+            self.buffered_read = self.vram.read(addr - 0x1000);
+            self.vram.read(addr)
+        } else {
+            let buffered = self.buffered_read;
+            self.buffered_read = self.vram.read(addr);
+            buffered
+        };
 
         self.incr_vram_addr();
 
@@ -180,11 +211,17 @@ impl Ppu {
 
         if self.scanline == 261 && self.cycle == 1 {
             self.set_vblank(false);
+            self.status &= !(STATUS_SPRITE0_HIT_FLAG | STATUS_SPRITE_OVERFLOW_FLAG);
         } else if self.scanline == 241 && self.cycle == 1 {
             self.set_vblank(true);
             if self.nmi_flag() {
                 nmi = true;
             }
+        }
+
+        if self.nmi_queued {
+            nmi = true;
+            self.nmi_queued = false;
         }
 
         let end_frame = self.tick();
@@ -200,10 +237,40 @@ impl Ppu {
             return;
         }
 
-        let shift = 32 + (7 - self.scroll) * 4;
-        let bg_color_addr = (0x3f00 | self.tile_data >> shift) as u16;
-        let bg_palette_index = self.vram.read(bg_color_addr);
-        let color = SYSTEM_PALETTE[(bg_palette_index % 64) as usize];
+        if self.cycle == 1 {
+            self.evaluate_sprites();
+        }
+
+        let x = (self.cycle - 1) as u8;
+        let y = self.scanline as u8;
+
+        let mut bg_pixel = 0u8;
+        let mut color = SYSTEM_PALETTE[(self.vram.read(0x3f00) % 64) as usize];
+
+        if self.display_background() {
+            let shift = 32 + (7 - self.scroll) * 4;
+            bg_pixel = ((self.tile_data >> shift) & 0x0f) as u8;
+            let bg_color_addr = if bg_pixel & 0x03 == 0 {
+                0x3f00
+            } else {
+                0x3f00 | bg_pixel as u16
+            };
+            let bg_palette_index = self.vram.read(bg_color_addr);
+            color = SYSTEM_PALETTE[(bg_palette_index % 64) as usize];
+        }
+
+        if self.display_sprites() {
+            if let Some((sprite_color, behind_bg, sprite0)) = self.sprite_pixel(x, y) {
+                let bg_opaque = bg_pixel & 0x03 != 0;
+                if !behind_bg || !bg_opaque {
+                    color = sprite_color;
+                }
+                if sprite0 && bg_opaque && self.display_background() {
+                    self.status |= STATUS_SPRITE0_HIT_FLAG;
+                }
+            }
+        }
+
         self.screen[256 * self.scanline as usize + self.cycle as usize - 1] = color;
     }
 
@@ -214,6 +281,101 @@ impl Ppu {
             320 => {}
             _ => {}
         }
+    }
+
+    fn evaluate_sprites(&mut self) {
+        self.sprites.clear();
+
+        let sprite_height = self.sprite_height() as i16;
+        if self.scanline < 0 || self.scanline > 239 {
+            return;
+        }
+
+        let mut count = 0;
+        for i in 0..64 {
+            let base = i * 4;
+            let y = self.spr_ram[base] as i16;
+            let sprite_y = y + 1;
+            let row = self.scanline - sprite_y;
+            if row >= 0 && row < sprite_height {
+                count += 1;
+                if self.sprites.len() < 8 {
+                    self.sprites.push(Sprite {
+                        y: self.spr_ram[base],
+                        tile: self.spr_ram[base + 1],
+                        attr: self.spr_ram[base + 2],
+                        x: self.spr_ram[base + 3],
+                        index: i as u8,
+                    });
+                }
+            }
+        }
+
+        if count > 8 {
+            self.status |= STATUS_SPRITE_OVERFLOW_FLAG;
+        }
+    }
+
+    fn sprite_pixel(&self, x: u8, y: u8) -> Option<(u32, bool, bool)> {
+        let sprite_height = self.sprite_height() as i16;
+
+        for sprite in &self.sprites {
+            let sprite_x = sprite.x as i16;
+            if x as i16 < sprite_x || x as i16 >= sprite_x + 8 {
+                continue;
+            }
+
+            let sprite_y = sprite.y as i16 + 1;
+            let mut row = y as i16 - sprite_y;
+            if row < 0 || row >= sprite_height {
+                continue;
+            }
+
+            if sprite.attr & 0x80 != 0 {
+                row = sprite_height - 1 - row;
+            }
+
+            let (tile, row_in_tile, table_base) = if sprite_height == 16 {
+                let mut tile = sprite.tile & 0xFE;
+                let mut row_in_tile = row as u8;
+                if row_in_tile >= 8 {
+                    tile = tile.wrapping_add(1);
+                    row_in_tile -= 8;
+                }
+                let table_base = if sprite.tile & 0x01 == 0 { 0 } else { 0x1000 };
+                (tile, row_in_tile, table_base)
+            } else {
+                (sprite.tile, row as u8, self.sprite_pattern_table())
+            };
+
+            let addr = table_base + (tile as u16) * 16 + row_in_tile as u16;
+            let low = self.vram.read(addr);
+            let high = self.vram.read(addr + 8);
+
+            let mut col = (x as i16 - sprite_x) as u8;
+            if sprite.attr & 0x40 != 0 {
+                col = 7 - col;
+            }
+
+            let bit = 7 - col;
+            let low_bit = (low >> bit) & 1;
+            let high_bit = (high >> bit) & 1;
+            let color = (high_bit << 1) | low_bit;
+
+            if color == 0 {
+                continue;
+            }
+
+            let palette = sprite.attr & 0x03;
+            let palette_addr = 0x3f10 + (palette as u16) * 4 + color as u16;
+            let palette_index = self.vram.read(palette_addr);
+            let sprite_color = SYSTEM_PALETTE[(palette_index % 64) as usize];
+            let behind_bg = sprite.attr & 0x20 != 0;
+            let sprite0 = sprite.index == 0;
+            return Some((sprite_color, behind_bg, sprite0));
+        }
+
+        None
     }
 
     fn fetch_bg_data(&mut self) {
@@ -334,6 +496,22 @@ impl Ppu {
         }
     }
 
+    fn sprite_pattern_table(&self) -> u16 {
+        if self.ctrl & CTRL_SPRITE_PATTERN_FLAG == 0 {
+            0
+        } else {
+            0x1000
+        }
+    }
+
+    fn sprite_height(&self) -> u8 {
+        if self.ctrl & CTRL_SPRITE_SIZE_FLAG == 0 {
+            8
+        } else {
+            16
+        }
+    }
+
     fn nmi_flag(&self) -> bool {
         self.ctrl & CTRL_NMI_FLAG != 0
     }
@@ -359,9 +537,13 @@ impl Ppu {
 mod tests {
     use super::*;
 
+    fn new_test_ppu() -> Ppu {
+        Ppu::new(Vec::new(), 0x2000, Mirroring::Horizontal)
+    }
+
     #[test]
     fn test_write_ctrl() {
-        let mut ppu = Ppu::new();
+        let mut ppu = new_test_ppu();
 
         ppu.write_ctrl(0xff);
 
@@ -371,7 +553,7 @@ mod tests {
 
     #[test]
     fn test_write_scroll() {
-        let mut ppu = Ppu::new();
+        let mut ppu = new_test_ppu();
 
         ppu.write_scroll(0x7d);
 
@@ -387,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_writing_to_vram() {
-        let mut ppu = Ppu::new();
+        let mut ppu = new_test_ppu();
 
         ppu.read_status();
         ppu.write_vram_addr(0x21);
@@ -411,7 +593,7 @@ mod tests {
 
     #[test]
     fn test_writing_to_spr_ram() {
-        let mut ppu = Ppu::new();
+        let mut ppu = new_test_ppu();
 
         ppu.write_spr_ram_addr(0x08);
         ppu.write_spr_ram_data(0xff);
