@@ -84,10 +84,7 @@ fn assert_golden_frame(rom_env: &str, expected_env: &str, frames_env: &str, defa
     let expected = match env::var(expected_env) {
         Ok(value) => parse_hex_u64(&value).expect("Expected hash must be hex"),
         Err(_) => {
-            panic!(
-                "Missing {}. Computed hash: {:016x}",
-                expected_env, hash
-            );
+            panic!("Missing {}. Computed hash: {:016x}", expected_env, hash);
         }
     };
 

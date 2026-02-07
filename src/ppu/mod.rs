@@ -15,15 +15,16 @@ const STATUS_SPRITE0_HIT_FLAG: u8 = 0x40;
 const STATUS_VBLANK_FLAG: u8 = 0x80;
 const PIXELS: usize = 256 * 240;
 
-static SYSTEM_PALETTE: [u32; 64] =
-    [0x757575, 0x271b8f, 0x0000ab, 0x47009f, 0x8f0077, 0xab0013, 0xa70000, 0x7f0b00, 0x432f00,
-     0x004700, 0x005100, 0x003f17, 0x1b3f5f, 0x000000, 0x000000, 0x000000, 0xbcbcbc, 0x0073ef,
-     0x233bef, 0x8300f3, 0xbf00bf, 0xe7005b, 0xdb2b00, 0xcb4f0f, 0x8b7300, 0x009700, 0x00ab00,
-     0x00933b, 0x00838b, 0x000000, 0x000000, 0x000000, 0xffffff, 0x3fbfff, 0x5f97ff, 0xa78bfd,
-     0xf77bff, 0xff77b7, 0xff7763, 0xff9b3b, 0xf3bf3f, 0x83d313, 0x4fdf4b, 0x58f898, 0x00ebdb,
-     0x000000, 0x000000, 0x000000, 0xffffff, 0xabe7ff, 0xc7d7ff, 0xd7cbff, 0xffc7ff, 0xffc7db,
-     0xffbfb3, 0xffdbab, 0xffe7a3, 0xe3ffa3, 0xabf3bf, 0xb3ffcf, 0x9ffff3, 0x000000, 0x000000,
-     0x000000];
+static SYSTEM_PALETTE: [u32; 64] = [
+    0x757575, 0x271b8f, 0x0000ab, 0x47009f, 0x8f0077, 0xab0013, 0xa70000, 0x7f0b00, 0x432f00,
+    0x004700, 0x005100, 0x003f17, 0x1b3f5f, 0x000000, 0x000000, 0x000000, 0xbcbcbc, 0x0073ef,
+    0x233bef, 0x8300f3, 0xbf00bf, 0xe7005b, 0xdb2b00, 0xcb4f0f, 0x8b7300, 0x009700, 0x00ab00,
+    0x00933b, 0x00838b, 0x000000, 0x000000, 0x000000, 0xffffff, 0x3fbfff, 0x5f97ff, 0xa78bfd,
+    0xf77bff, 0xff77b7, 0xff7763, 0xff9b3b, 0xf3bf3f, 0x83d313, 0x4fdf4b, 0x58f898, 0x00ebdb,
+    0x000000, 0x000000, 0x000000, 0xffffff, 0xabe7ff, 0xc7d7ff, 0xd7cbff, 0xffc7ff, 0xffc7db,
+    0xffbfb3, 0xffdbab, 0xffe7a3, 0xe3ffa3, 0xabf3bf, 0xb3ffcf, 0x9ffff3, 0x000000, 0x000000,
+    0x000000,
+];
 
 pub struct CycleResult {
     pub end_frame: bool,
@@ -136,9 +137,10 @@ impl Ppu {
 
     pub fn write_scroll(&mut self, value: u8) {
         if self.write_flag {
-            self.tmp_vram_addr = (self.tmp_vram_addr & 0x0c1f) | ((value as u16) & 0x07) << 12 |
-                                 ((value as u16) & 0x38) << 2 |
-                                 ((value as u16) & 0xc0) << 2;
+            self.tmp_vram_addr = (self.tmp_vram_addr & 0x0c1f)
+                | ((value as u16) & 0x07) << 12
+                | ((value as u16) & 0x38) << 2
+                | ((value as u16) & 0xc0) << 2;
         } else {
             self.scroll = value & 0x07;
             self.tmp_vram_addr = (self.tmp_vram_addr & 0xffe0) | (value as u16) >> 3;
@@ -401,8 +403,10 @@ impl Ppu {
     }
 
     fn fetch_attribute_table_byte(&mut self) {
-        let addr = 0x23C0 | (self.vram_addr & 0x0C00) | ((self.vram_addr >> 4) & 0x38) |
-                   ((self.vram_addr >> 2) & 0x07);
+        let addr = 0x23C0
+            | (self.vram_addr & 0x0C00)
+            | ((self.vram_addr >> 4) & 0x38)
+            | ((self.vram_addr >> 2) & 0x07);
         let shift = ((self.vram_addr >> 4) & 0x04) | (self.vram_addr & 0x02);
         self.attribute_table_byte = ((self.vram.read(addr) >> shift) & 0x03) << 2;
     }
@@ -430,8 +434,8 @@ impl Ppu {
 
             self.low_bg_tile_byte <<= 1;
             self.high_bg_tile_byte <<= 1;
-            new_tile_data = (new_tile_data << 4) |
-                            (self.attribute_table_byte | high_byte | low_byte) as u64;
+            new_tile_data =
+                (new_tile_data << 4) | (self.attribute_table_byte | high_byte | low_byte) as u64;
         }
 
         self.tile_data = self.tile_data | new_tile_data;

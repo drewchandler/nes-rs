@@ -1,65 +1,9 @@
-name: Release binaries
-
-on:
-  push:
-    tags:
-      - "v[0-9]*"
-
-permissions:
-  contents: write
-
-jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build release
-        run: cargo build --release
-
-      - name: Package (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          mkdir -p dist
-          cp target/release/nes-rs dist/
-          tar -czf "nes-rs-${{ github.ref_name }}-macos.tar.gz" -C dist nes-rs
-
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item target\release\nes-rs.exe dist\
-          Compress-Archive -Path dist\nes-rs.exe -DestinationPath "nes-rs-${{ github.ref_name }}-windows.zip"
-
-      - name: Upload release asset (macOS)
-        if: runner.os == 'macOS'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: nes-rs-${{ github.ref_name }}-macos.tar.gz
-
-      - name: Upload release asset (Windows)
-        if: runner.os == 'Windows'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: nes-rs-${{ github.ref_name }}-windows.zip
 name: Release
 
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]*"
 
 permissions:
   contents: write

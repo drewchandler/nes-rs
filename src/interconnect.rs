@@ -1,6 +1,6 @@
 use joypad::Joypad;
-use mapper::Mapper;
 use mapper::unrom::Unrom;
+use mapper::Mapper;
 use ppu::Ppu;
 use rom::Rom;
 
@@ -58,19 +58,17 @@ fn map_addr(addr: u16) -> MappedAddress {
     match addr {
         0x0000..=0x1fff => MappedAddress::Ram(addr as usize % 2048),
         0x8000..=0xffff => MappedAddress::PrgRom,
-        0x2000..=0x3fff => {
-            match (addr - 0x2000) % 8 {
-                0 => MappedAddress::PpuControlRegister,
-                1 => MappedAddress::PpuMaskRegister,
-                2 => MappedAddress::PpuStatusRegister,
-                3 => MappedAddress::SprRamAddressRegister,
-                4 => MappedAddress::SprRamIoRegister,
-                5 => MappedAddress::PpuScrollRegister,
-                6 => MappedAddress::VramAddressRegister,
-                7 => MappedAddress::VramIoRegister,
-                _ => unreachable!(),
-            }
-        }
+        0x2000..=0x3fff => match (addr - 0x2000) % 8 {
+            0 => MappedAddress::PpuControlRegister,
+            1 => MappedAddress::PpuMaskRegister,
+            2 => MappedAddress::PpuStatusRegister,
+            3 => MappedAddress::SprRamAddressRegister,
+            4 => MappedAddress::SprRamIoRegister,
+            5 => MappedAddress::PpuScrollRegister,
+            6 => MappedAddress::VramAddressRegister,
+            7 => MappedAddress::VramIoRegister,
+            _ => unreachable!(),
+        },
         0x4000 => MappedAddress::PapuPulse1ControlRegister,
         0x4001 => MappedAddress::PapuPulse1RampControlRegister,
         0x4002 => MappedAddress::PapuPulse1FineTuneRegister,
@@ -153,8 +151,10 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::VramAddressRegister => self.ppu.write_vram_addr(value),
             MappedAddress::VramIoRegister => self.ppu.write_vram_data(value),
             _ => {
-                println!("WARNING: Writing to unimplemented memory address: {:x}",
-                         addr)
+                println!(
+                    "WARNING: Writing to unimplemented memory address: {:x}",
+                    addr
+                )
             }
         }
     }
@@ -166,8 +166,10 @@ impl Interconnect for MemoryMappingInterconnect {
                 self.ram[addr + 1] = (value >> 8) as u8;
             }
             _ => {
-                println!("WARNING: Writing to unimplemented memory address: {:x}",
-                         addr)
+                println!(
+                    "WARNING: Writing to unimplemented memory address: {:x}",
+                    addr
+                )
             }
         }
     }

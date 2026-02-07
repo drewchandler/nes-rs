@@ -1,6 +1,6 @@
+use std::fs;
 use std::io::{self, Read};
 use std::path;
-use std::fs;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mirroring {
@@ -51,7 +51,8 @@ impl Rom {
 
         let mapper = (header[7] & 0xf0) | (header[6] >> 4);
 
-        let prg_rom = (0..header[4]).map(|_| {
+        let prg_rom = (0..header[4])
+            .map(|_| {
                 let mut buf = vec![0u8; 16384];
                 file.read_exact(&mut buf)?;
                 Ok(buf)
