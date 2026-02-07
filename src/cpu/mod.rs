@@ -43,6 +43,7 @@ pub struct Cpu {
     sp: u8,
     x: u8,
     y: u8,
+    last_opcode: u8,
 }
 
 impl Cpu {
@@ -54,6 +55,7 @@ impl Cpu {
             sp: 0xfd,
             x: 0,
             y: 0,
+            last_opcode: 0,
         }
     }
 
@@ -71,6 +73,9 @@ impl Cpu {
 
     pub fn step(&mut self, interconnect: &mut dyn Interconnect) -> u16 {
         let opcode = self.read_pc(interconnect);
+        self.last_opcode = opcode;
+        let opcode_pc = self.pc.wrapping_sub(1);
+        interconnect.trace_cpu(opcode_pc, opcode);
         let Instruction(op, am) = Instruction::from_opcode(opcode);
 
         macro_rules! with_value {
@@ -230,6 +235,21 @@ impl Cpu {
     }
 
     fn write_word(&self, interconnect: &mut dyn Interconnect, addr: u16, value: u8) -> bool {
+        if (0x4018..=0x5fff).contains(&addr) {
+            panic!(
+                "Unmapped write to {:04x} = {:02x} at PC {:04x} opcode {:02x} A {:02x} X {:02x} Y {:02x} P {:02x} SP {:02x}",
+                addr,
+                value,
+                self.pc,
+                self.last_opcode,
+                self.a,
+                self.x,
+                self.y,
+                self.p,
+                self.sp
+            );
+        }
+
         if addr == 0x4014 {
             let dma_start = (value as u16) << 8;
             for addr in dma_start..dma_start + 256 {

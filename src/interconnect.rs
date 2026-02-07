@@ -10,6 +10,7 @@ pub trait Interconnect {
     fn read_word(&mut self, addr: u16) -> u8;
     fn write_word(&mut self, addr: u16, value: u8);
     fn write_double(&mut self, addr: u16, value: u16);
+    fn trace_cpu(&mut self, _pc: u16, _opcode: u8) {}
 }
 
 pub struct MemoryMappingInterconnect {
@@ -17,6 +18,8 @@ pub struct MemoryMappingInterconnect {
     ram: [u8; 2048],
     pub ppu: Ppu,
     pub joypad1: Joypad,
+    last_cpu_pc: u16,
+    last_cpu_opcode: u8,
 }
 
 enum MappedAddress {
@@ -118,6 +121,18 @@ impl MemoryMappingInterconnect {
             ram: [0; 2048],
             ppu: Ppu::new(chr_rom, chr_ram_size, mirroring),
             joypad1: Joypad::new(),
+            last_cpu_pc: 0,
+            last_cpu_opcode: 0,
+        }
+    }
+
+    fn check_expansion_access(&self, addr: u16, is_write: bool) {
+        if (0x4020..=0x5fff).contains(&addr) {
+            let access = if is_write { "write" } else { "read" };
+            panic!(
+                "Expansion {} at {:04x} (pc={:04x} opcode={:02x})",
+                access, addr, self.last_cpu_pc, self.last_cpu_opcode
+            );
         }
     }
 }
@@ -128,6 +143,7 @@ impl Interconnect for MemoryMappingInterconnect {
     }
 
     fn read_word(&mut self, addr: u16) -> u8 {
+        self.check_expansion_access(addr, false);
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
@@ -141,6 +157,7 @@ impl Interconnect for MemoryMappingInterconnect {
     }
 
     fn write_word(&mut self, addr: u16, value: u8) {
+        self.check_expansion_access(addr, true);
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr] = value,
             MappedAddress::PrgRom => self.mapper.write(addr, value),
@@ -162,6 +179,7 @@ impl Interconnect for MemoryMappingInterconnect {
     }
 
     fn write_double(&mut self, addr: u16, value: u16) {
+        self.check_expansion_access(addr, true);
         match map_addr(addr) {
             MappedAddress::Ram(addr) => {
                 self.ram[addr] = value as u8;
@@ -174,5 +192,10 @@ impl Interconnect for MemoryMappingInterconnect {
                 )
             }
         }
+    }
+
+    fn trace_cpu(&mut self, pc: u16, opcode: u8) {
+        self.last_cpu_pc = pc;
+        self.last_cpu_opcode = opcode;
     }
 }
