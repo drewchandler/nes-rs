@@ -2224,4 +2224,54 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_indirect_x_zero_page_wrap() {
+        let mut interconnect = TestInterconnect::new();
+        let mut cpu = Cpu::new();
+
+        // LDX #$01
+        // LDA ($ff, X) -> pointer should wrap from $ff+$01 = $00
+        interconnect.write_double(RESET_VECTOR, RESET_ADDR);
+        interconnect.write_word(RESET_ADDR, 0xa2);
+        interconnect.write_word(RESET_ADDR + 1, 0x01);
+        interconnect.write_word(RESET_ADDR + 2, 0xa1);
+        interconnect.write_word(RESET_ADDR + 3, 0xff);
+
+        // Zero-page pointer at $00/$01 -> $1234
+        interconnect.write_word(0x0000, 0x34);
+        interconnect.write_word(0x0001, 0x12);
+        interconnect.write_word(0x1234, 0x77);
+
+        cpu.reset(&mut interconnect);
+        cpu.step(&mut interconnect);
+        cpu.step(&mut interconnect);
+
+        assert_eq!(cpu.a, 0x77);
+    }
+
+    #[test]
+    fn test_indirect_y_zero_page_wrap() {
+        let mut interconnect = TestInterconnect::new();
+        let mut cpu = Cpu::new();
+
+        // LDY #$01
+        // LDA ($ff), Y -> pointer should wrap for high byte read
+        interconnect.write_double(RESET_VECTOR, RESET_ADDR);
+        interconnect.write_word(RESET_ADDR, 0xa0);
+        interconnect.write_word(RESET_ADDR + 1, 0x01);
+        interconnect.write_word(RESET_ADDR + 2, 0xb1);
+        interconnect.write_word(RESET_ADDR + 3, 0xff);
+
+        // Zero-page pointer at $ff/$00 -> $1234, plus Y => $1235
+        interconnect.write_word(0x00ff, 0x34);
+        interconnect.write_word(0x0000, 0x12);
+        interconnect.write_word(0x1235, 0x99);
+
+        cpu.reset(&mut interconnect);
+        cpu.step(&mut interconnect);
+        cpu.step(&mut interconnect);
+
+        assert_eq!(cpu.a, 0x99);
+    }
 }
