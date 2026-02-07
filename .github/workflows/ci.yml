@@ -15,6 +15,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -31,5 +33,14 @@ jobs:
             libxext-dev \
             libxfixes-dev
 
-      - name: Run tests
-        run: cargo test
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests (deny warnings)
+        env:
+          RUSTFLAGS: -D warnings
+          RUSTDOCFLAGS: -D warnings
+        run: cargo test --all-targets
