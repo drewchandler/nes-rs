@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 pub struct ButtonState {
     pub a: bool,
     pub b: bool,

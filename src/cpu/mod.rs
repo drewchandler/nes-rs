@@ -267,6 +267,7 @@ impl Cpu {
         };
     }
 
+    #[allow(dead_code)]
     fn interrupt_disable(&self) -> bool {
         self.p & INTERUPT_DISABLE != 0
     }
@@ -279,6 +280,7 @@ impl Cpu {
         };
     }
 
+    #[allow(dead_code)]
     fn decimal_mode(&self) -> bool {
         self.p & DECIMAL_MODE != 0
     }
@@ -291,6 +293,7 @@ impl Cpu {
         };
     }
 
+    #[allow(dead_code)]
     fn break_command(&self) -> bool {
         self.p & BREAK_COMMAND != 0
     }

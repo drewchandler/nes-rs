@@ -1,4 +1,5 @@
 use joypad::Joypad;
+use mapper::nrom::Nrom;
 use mapper::unrom::Unrom;
 use mapper::Mapper;
 use ppu::Ppu;
@@ -106,13 +107,14 @@ impl MemoryMappingInterconnect {
             chr_ram_size,
         } = rom;
 
-        let mapper = match mapper {
-            2 => Unrom::new(prg_rom),
+        let mapper: Box<dyn Mapper> = match mapper {
+            0 => Box::new(Nrom::new(prg_rom)),
+            2 => Box::new(Unrom::new(prg_rom)),
             _ => panic!("Unimplemented mapper"),
         };
 
         MemoryMappingInterconnect {
-            mapper: Box::new(mapper),
+            mapper,
             ram: [0; 2048],
             ppu: Ppu::new(chr_rom, chr_ram_size, mirroring),
             joypad1: Joypad::new(),

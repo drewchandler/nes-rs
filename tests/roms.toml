@@ -1,0 +1,30 @@
+source = "https://github.com/christopherpow/nes-test-roms"
+commit = "95d8f621ae55cee0d09b91519a8989ae0e64753b"
+
+[[roms]]
+id = "blargg_ppu_vbl_clear_time"
+path = "blargg_ppu_tests_2005.09.15b/vbl_clear_time.nes"
+sha256 = "1a1d3ae8062ce0d4f1f3eafa35bf3c3e5df94fe198e7630a09678a60b03b73a0"
+frames = 300
+expected_hash = "0x6bc75009e379860a"
+
+[[roms]]
+id = "blargg_ppu_vram_access"
+path = "blargg_ppu_tests_2005.09.15b/vram_access.nes"
+sha256 = "a0cde2a3c98d9f62afcba62d4e8f4f4228574ff96ce96fbfdc777e1393c16ee6"
+frames = 300
+expected_hash = "0x246fbee5c0ae1486"
+
+[[roms]]
+id = "blargg_ppu_palette"
+path = "blargg_ppu_tests_2005.09.15b/palette_ram.nes"
+sha256 = "11c1de16c67795b247169819a34b9d4dd46165478d6de19d7cd6e7311e906a80"
+frames = 300
+expected_hash = "0x246fbee5c0ae1486"
+
+[[roms]]
+id = "blargg_ppu_sprite_hit"
+path = "sprite_hit_tests_2005.10.05/01.basics.nes"
+sha256 = "51819e8e502bd88fe3b7244198a074dbeef2e848f66c587be04b04f1f0d4bb52"
+frames = 300
+expected_hash = "0x1084958595392b82"

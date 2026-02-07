@@ -1,3 +1,4 @@
+pub mod nrom;
 pub mod unrom;
 
 pub trait Mapper {
