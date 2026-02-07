@@ -12,7 +12,7 @@ pub trait Interconnect {
 }
 
 pub struct MemoryMappingInterconnect {
-    mapper: Box<Mapper>,
+    mapper: Box<dyn Mapper>,
     ram: [u8; 2048],
     pub ppu: Ppu,
     pub joypad1: Joypad,
@@ -56,9 +56,9 @@ enum MappedAddress {
 
 fn map_addr(addr: u16) -> MappedAddress {
     match addr {
-        0x0000...0x1fff => MappedAddress::Ram(addr as usize % 2048),
-        0x8000...0xffff => MappedAddress::PrgRom,
-        0x2000...0x3fff => {
+        0x0000..=0x1fff => MappedAddress::Ram(addr as usize % 2048),
+        0x8000..=0xffff => MappedAddress::PrgRom,
+        0x2000..=0x3fff => {
             match (addr - 0x2000) % 8 {
                 0 => MappedAddress::PpuControlRegister,
                 1 => MappedAddress::PpuMaskRegister,

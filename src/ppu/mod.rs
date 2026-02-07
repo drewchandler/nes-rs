@@ -190,7 +190,7 @@ impl Ppu {
 
         if self.rendering_enabled() {
             match self.scanline {
-                0...239 => {
+                0..=239 => {
                     self.process_render_scanline();
                     self.process_fetch_scanline();
 
@@ -276,7 +276,7 @@ impl Ppu {
 
     fn process_fetch_scanline(&mut self) {
         match self.cycle {
-            1...256 | 321...336 => self.fetch_bg_data(),
+            1..=256 | 321..=336 => self.fetch_bg_data(),
             257 => self.increment_y(),
             320 => {}
             _ => {}
@@ -602,5 +602,46 @@ mod tests {
 
         assert_eq!(ppu.spr_ram[0x08 as usize], 0xff);
         assert_eq!(ppu.spr_ram[0x09 as usize], 0xfe);
+    }
+
+    #[test]
+    fn test_ppudata_buffered_reads() {
+        let mut ppu = new_test_ppu();
+
+        ppu.vram.write(0x2000, 0x12);
+        ppu.vram.write(0x2001, 0x34);
+
+        ppu.read_status();
+        ppu.write_vram_addr(0x20);
+        ppu.write_vram_addr(0x00);
+
+        assert_eq!(ppu.read_vram_data(), 0x00);
+        assert_eq!(ppu.read_vram_data(), 0x12);
+    }
+
+    #[test]
+    fn test_ppudata_palette_read_bypass() {
+        let mut ppu = new_test_ppu();
+
+        ppu.vram.write(0x2f00, 0x99);
+        ppu.vram.write(0x3f00, 0x3a);
+
+        ppu.read_status();
+        ppu.write_vram_addr(0x3f);
+        ppu.write_vram_addr(0x00);
+
+        assert_eq!(ppu.read_vram_data(), 0x3a);
+        assert_eq!(ppu.buffered_read, 0x99);
+    }
+
+    #[test]
+    fn test_oam_read_write() {
+        let mut ppu = new_test_ppu();
+
+        ppu.write_spr_ram_addr(0x10);
+        ppu.write_spr_ram_data(0x7b);
+        ppu.write_spr_ram_addr(0x10);
+
+        assert_eq!(ppu.read_spr_ram_data(), 0x7b);
     }
 }

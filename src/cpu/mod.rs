@@ -57,11 +57,11 @@ impl Cpu {
         }
     }
 
-    pub fn reset(&mut self, interconnect: &mut Interconnect) {
+    pub fn reset(&mut self, interconnect: &mut dyn Interconnect) {
         self.pc = interconnect.read_double(RESET_VECTOR);
     }
 
-    pub fn nmi(&mut self, interconnect: &mut Interconnect) {
+    pub fn nmi(&mut self, interconnect: &mut dyn Interconnect) {
         let pc = self.pc;
         self.push_double(interconnect, pc);
         let p = self.p;
@@ -69,7 +69,7 @@ impl Cpu {
         self.pc = interconnect.read_double(0xfffa);
     }
 
-    pub fn step(&mut self, interconnect: &mut Interconnect) -> u16 {
+    pub fn step(&mut self, interconnect: &mut dyn Interconnect) -> u16 {
         let opcode = self.read_pc(interconnect);
         let Instruction(op, am) = Instruction::from_opcode(opcode);
 
@@ -161,7 +161,7 @@ impl Cpu {
         }
     }
 
-    fn value_for(&mut self, interconnect: &mut Interconnect, am: &AddressingMode) -> u8 {
+    fn value_for(&mut self, interconnect: &mut dyn Interconnect, am: &AddressingMode) -> u8 {
         match *am {
             AddressingMode::Immediate => self.read_pc(interconnect),
             AddressingMode::Absolute |
@@ -180,7 +180,7 @@ impl Cpu {
         }
     }
 
-    fn addr_for(&mut self, interconnect: &mut Interconnect, am: &AddressingMode) -> u16 {
+    fn addr_for(&mut self, interconnect: &mut dyn Interconnect, am: &AddressingMode) -> u16 {
         match *am {
             AddressingMode::Absolute => {
                 let lower = self.read_pc(interconnect);
@@ -224,13 +224,13 @@ impl Cpu {
     }
 
 
-    fn read_pc(&mut self, interconnect: &mut Interconnect) -> u8 {
+    fn read_pc(&mut self, interconnect: &mut dyn Interconnect) -> u8 {
         let value = interconnect.read_word(self.pc);
         self.pc += 1;
         value
     }
 
-    fn write_word(&self, interconnect: &mut Interconnect, addr: u16, value: u8) -> bool {
+    fn write_word(&self, interconnect: &mut dyn Interconnect, addr: u16, value: u8) -> bool {
         if addr == 0x4014 {
             let dma_start = (value as u16) << 8;
             for addr in dma_start..dma_start + 256 {
@@ -355,7 +355,7 @@ impl Cpu {
         self.a = self.set_zn(a & value);
     }
 
-    fn asl(&mut self, interconnect: &mut Interconnect, am: AddressingMode) {
+    fn asl(&mut self, interconnect: &mut dyn Interconnect, am: AddressingMode) {
         if let AddressingMode::Accumulator = am {
             let a = self.a;
             self.a = self.arithmetic_shift_left(a);
@@ -410,7 +410,7 @@ impl Cpu {
         }
     }
 
-    fn brk(&mut self, interconnect: &mut Interconnect) {
+    fn brk(&mut self, interconnect: &mut dyn Interconnect) {
         let pc = self.pc;
         self.push_double(interconnect, pc);
         let p = self.p;
@@ -462,7 +462,7 @@ impl Cpu {
         self.compare(y, value);
     }
 
-    fn dec(&mut self, interconnect: &mut Interconnect, addr: u16) {
+    fn dec(&mut self, interconnect: &mut dyn Interconnect, addr: u16) {
         let value = self.set_zn(interconnect.read_word(addr).overflowing_sub(1).0);
         interconnect.write_word(addr, value);
     }
@@ -482,7 +482,7 @@ impl Cpu {
         self.a = self.set_zn(a ^ value);
     }
 
-    fn inc(&mut self, interconnect: &mut Interconnect, addr: u16) {
+    fn inc(&mut self, interconnect: &mut dyn Interconnect, addr: u16) {
         let value = self.set_zn(interconnect.read_word(addr).overflowing_add(1).0);
         interconnect.write_word(addr, value);
     }
@@ -501,7 +501,7 @@ impl Cpu {
         self.pc = addr;
     }
 
-    fn jsr(&mut self, interconnect: &mut Interconnect, addr: u16) {
+    fn jsr(&mut self, interconnect: &mut dyn Interconnect, addr: u16) {
         let return_addr = self.pc - 1;
         self.push_double(interconnect, return_addr);
         self.pc = addr;
@@ -519,7 +519,7 @@ impl Cpu {
         self.y = self.set_zn(value);
     }
 
-    fn lsr(&mut self, interconnect: &mut Interconnect, am: AddressingMode) {
+    fn lsr(&mut self, interconnect: &mut dyn Interconnect, am: AddressingMode) {
         if let AddressingMode::Accumulator = am {
             let a = self.a;
             self.a = self.logical_shift_right(a);
@@ -536,26 +536,26 @@ impl Cpu {
         self.a = self.set_zn(a | value);
     }
 
-    fn pha(&mut self, interconnect: &mut Interconnect) {
+    fn pha(&mut self, interconnect: &mut dyn Interconnect) {
         let a = self.a;
         self.push_word(interconnect, a);
     }
 
-    fn php(&mut self, interconnect: &mut Interconnect) {
+    fn php(&mut self, interconnect: &mut dyn Interconnect) {
         let p = self.p;
         self.push_word(interconnect, p);
     }
 
-    fn pla(&mut self, interconnect: &mut Interconnect) {
+    fn pla(&mut self, interconnect: &mut dyn Interconnect) {
         let a = self.pop_word(interconnect);
         self.a = self.set_zn(a);
     }
 
-    fn plp(&mut self, interconnect: &mut Interconnect) {
+    fn plp(&mut self, interconnect: &mut dyn Interconnect) {
         self.p = self.pop_word(interconnect);
     }
 
-    fn rol(&mut self, interconnect: &mut Interconnect, am: AddressingMode) {
+    fn rol(&mut self, interconnect: &mut dyn Interconnect, am: AddressingMode) {
         if let AddressingMode::Accumulator = am {
             let a = self.a;
             self.a = self.rotate_left(a);
@@ -567,7 +567,7 @@ impl Cpu {
         }
     }
 
-    fn ror(&mut self, interconnect: &mut Interconnect, am: AddressingMode) {
+    fn ror(&mut self, interconnect: &mut dyn Interconnect, am: AddressingMode) {
         if let AddressingMode::Accumulator = am {
             let a = self.a;
             self.a = self.rotate_right(a);
@@ -579,12 +579,12 @@ impl Cpu {
         }
     }
 
-    fn rti(&mut self, interconnect: &mut Interconnect) {
+    fn rti(&mut self, interconnect: &mut dyn Interconnect) {
         self.p = self.pop_word(interconnect);
         self.pc = self.pop_double(interconnect);
     }
 
-    fn rts(&mut self, interconnect: &mut Interconnect) {
+    fn rts(&mut self, interconnect: &mut dyn Interconnect) {
         self.pc = self.pop_double(interconnect) + 1;
     }
 
@@ -612,15 +612,15 @@ impl Cpu {
         self.set_interrupt_disable(true);
     }
 
-    fn sta(&self, interconnect: &mut Interconnect, addr: u16) -> bool {
+    fn sta(&self, interconnect: &mut dyn Interconnect, addr: u16) -> bool {
         self.write_word(interconnect, addr, self.a)
     }
 
-    fn sty(&self, interconnect: &mut Interconnect, addr: u16) -> bool {
+    fn sty(&self, interconnect: &mut dyn Interconnect, addr: u16) -> bool {
         self.write_word(interconnect, addr, self.y)
     }
 
-    fn stx(&self, interconnect: &mut Interconnect, addr: u16) -> bool {
+    fn stx(&self, interconnect: &mut dyn Interconnect, addr: u16) -> bool {
         self.write_word(interconnect, addr, self.x)
     }
 
@@ -675,22 +675,22 @@ impl Cpu {
         self.set_zn((value >> 1) + ((carry_flag as u8) << 7))
     }
 
-    fn push_word(&mut self, interconnect: &mut Interconnect, value: u8) {
+    fn push_word(&mut self, interconnect: &mut dyn Interconnect, value: u8) {
         interconnect.write_word(STACK_END + self.sp as u16, value);
         self.sp -= 1;
     }
 
-    fn push_double(&mut self, interconnect: &mut Interconnect, value: u16) {
+    fn push_double(&mut self, interconnect: &mut dyn Interconnect, value: u16) {
         interconnect.write_double(STACK_END + self.sp as u16 - 1, value);
         self.sp -= 2;
     }
 
-    fn pop_word(&mut self, interconnect: &mut Interconnect) -> u8 {
+    fn pop_word(&mut self, interconnect: &mut dyn Interconnect) -> u8 {
         self.sp += 1;
         interconnect.read_word(STACK_END + self.sp as u16)
     }
 
-    fn pop_double(&mut self, interconnect: &mut Interconnect) -> u16 {
+    fn pop_double(&mut self, interconnect: &mut dyn Interconnect) -> u16 {
         self.sp += 2;
         interconnect.read_double(STACK_END + self.sp as u16 - 1)
     }
