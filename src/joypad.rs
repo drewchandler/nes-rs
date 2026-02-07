@@ -90,3 +90,9 @@ impl Joypad {
         self.state = state;
     }
 }
+
+impl Default for Joypad {
+    fn default() -> Self {
+        Joypad::new()
+    }
+}

@@ -16,7 +16,7 @@ pub const BREAK_VECTOR: u16 = 0xfffe;
 
 pub const STACK_END: u16 = 0x100;
 
-#[cfg_attr(rustfmt, rustfmt_skip)]
+#[rustfmt::skip]
 static CYCLES: [u16; 256] = [
     7,6,2,8,3,3,5,5,3,2,2,2,4,4,6,6,
     2,5,2,8,4,4,6,6,2,4,2,7,4,4,7,7,
@@ -694,6 +694,12 @@ impl Cpu {
     fn pop_double(&mut self, interconnect: &mut dyn Interconnect) -> u16 {
         self.sp += 2;
         interconnect.read_double(STACK_END + self.sp as u16 - 1)
+    }
+}
+
+impl Default for Cpu {
+    fn default() -> Self {
+        Cpu::new()
     }
 }
 

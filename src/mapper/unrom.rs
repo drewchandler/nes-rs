@@ -8,7 +8,7 @@ pub struct Unrom {
 impl Unrom {
     pub fn new(prg_rom: Vec<Vec<u8>>) -> Unrom {
         Unrom {
-            prg_rom: prg_rom,
+            prg_rom,
             active_bank: 0,
         }
     }
