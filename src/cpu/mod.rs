@@ -199,41 +199,13 @@ impl Cpu {
             AddressingMode::IndirectX => {
                 let zero_page_addr = self.read_pc(interconnect);
                 let base = zero_page_addr.overflowing_add(self.x).0;
-                let (addr, low, high) = self.read_zero_page_ptr(interconnect, base);
-                if (0x4020..=0x5fff).contains(&addr) {
-                    panic!(
-                        "IndirectX expansion addr {:04x} (pc {:04x} opcode {:02x} zp {:02x} base {:02x} low {:02x} high {:02x} X {:02x} Y {:02x})",
-                        addr,
-                        self.pc,
-                        self.last_opcode,
-                        zero_page_addr,
-                        base,
-                        low,
-                        high,
-                        self.x,
-                        self.y
-                    );
-                }
+                let (addr, _, _) = self.read_zero_page_ptr(interconnect, base);
                 addr
             }
             AddressingMode::IndirectY => {
                 let zero_page_addr = self.read_pc(interconnect);
-                let (base_addr, low, high) = self.read_zero_page_ptr(interconnect, zero_page_addr);
-                let addr = base_addr + self.y as u16;
-                if (0x4020..=0x5fff).contains(&addr) {
-                    panic!(
-                        "IndirectY expansion addr {:04x} (pc {:04x} opcode {:02x} zp {:02x} low {:02x} high {:02x} base {:04x} Y {:02x})",
-                        addr,
-                        self.pc,
-                        self.last_opcode,
-                        zero_page_addr,
-                        low,
-                        high,
-                        base_addr,
-                        self.y
-                    );
-                }
-                addr
+                let (base_addr, _, _) = self.read_zero_page_ptr(interconnect, zero_page_addr);
+                base_addr + self.y as u16
             }
             AddressingMode::ZeroPage => self.read_pc(interconnect) as u16,
             AddressingMode::ZeroPageX => {
@@ -276,21 +248,6 @@ impl Cpu {
     }
 
     fn write_word(&self, interconnect: &mut dyn Interconnect, addr: u16, value: u8) -> bool {
-        if addr == 0x00f0 || addr == 0x00f1 {
-            panic!(
-                "Zero-page pointer write {:04x} = {:02x} (pc {:04x} opcode {:02x} A {:02x} X {:02x} Y {:02x} P {:02x} SP {:02x})",
-                addr,
-                value,
-                self.pc,
-                self.last_opcode,
-                self.a,
-                self.x,
-                self.y,
-                self.p,
-                self.sp
-            );
-        }
-
         if (0x4018..=0x5fff).contains(&addr) {
             panic!(
                 "Unmapped write to {:04x} = {:02x} at PC {:04x} opcode {:02x} A {:02x} X {:02x} Y {:02x} P {:02x} SP {:02x}",
