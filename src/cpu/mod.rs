@@ -199,12 +199,41 @@ impl Cpu {
             AddressingMode::IndirectX => {
                 let zero_page_addr = self.read_pc(interconnect);
                 let base = zero_page_addr.overflowing_add(self.x).0;
-                self.read_zero_page_addr(interconnect, base)
+                let (addr, low, high) = self.read_zero_page_ptr(interconnect, base);
+                if (0x4020..=0x5fff).contains(&addr) {
+                    panic!(
+                        "IndirectX expansion addr {:04x} (pc {:04x} opcode {:02x} zp {:02x} base {:02x} low {:02x} high {:02x} X {:02x} Y {:02x})",
+                        addr,
+                        self.pc,
+                        self.last_opcode,
+                        zero_page_addr,
+                        base,
+                        low,
+                        high,
+                        self.x,
+                        self.y
+                    );
+                }
+                addr
             }
             AddressingMode::IndirectY => {
                 let zero_page_addr = self.read_pc(interconnect);
-                let addr = self.read_zero_page_addr(interconnect, zero_page_addr);
-                addr + self.y as u16
+                let (base_addr, low, high) = self.read_zero_page_ptr(interconnect, zero_page_addr);
+                let addr = base_addr + self.y as u16;
+                if (0x4020..=0x5fff).contains(&addr) {
+                    panic!(
+                        "IndirectY expansion addr {:04x} (pc {:04x} opcode {:02x} zp {:02x} low {:02x} high {:02x} base {:04x} Y {:02x})",
+                        addr,
+                        self.pc,
+                        self.last_opcode,
+                        zero_page_addr,
+                        low,
+                        high,
+                        base_addr,
+                        self.y
+                    );
+                }
+                addr
             }
             AddressingMode::ZeroPage => self.read_pc(interconnect) as u16,
             AddressingMode::ZeroPageX => {
@@ -236,9 +265,19 @@ impl Cpu {
     }
 
     fn read_zero_page_addr(&mut self, interconnect: &mut dyn Interconnect, addr: u8) -> u16 {
-        let low = interconnect.read_word(addr as u16) as u16;
-        let high = interconnect.read_word(addr.wrapping_add(1) as u16) as u16;
-        (high << 8) | low
+        let (addr, _, _) = self.read_zero_page_ptr(interconnect, addr);
+        addr
+    }
+
+    fn read_zero_page_ptr(
+        &mut self,
+        interconnect: &mut dyn Interconnect,
+        addr: u8,
+    ) -> (u16, u8, u8) {
+        let low = interconnect.read_word(addr as u16);
+        let high = interconnect.read_word(addr.wrapping_add(1) as u16);
+        let addr = ((high as u16) << 8) | low as u16;
+        (addr, low, high)
     }
 
     fn write_word(&self, interconnect: &mut dyn Interconnect, addr: u16, value: u8) -> bool {
