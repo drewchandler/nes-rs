@@ -276,6 +276,21 @@ impl Cpu {
     }
 
     fn write_word(&self, interconnect: &mut dyn Interconnect, addr: u16, value: u8) -> bool {
+        if addr == 0x00f0 || addr == 0x00f1 {
+            panic!(
+                "Zero-page pointer write {:04x} = {:02x} (pc {:04x} opcode {:02x} A {:02x} X {:02x} Y {:02x} P {:02x} SP {:02x})",
+                addr,
+                value,
+                self.pc,
+                self.last_opcode,
+                self.a,
+                self.x,
+                self.y,
+                self.p,
+                self.sp
+            );
+        }
+
         if (0x4018..=0x5fff).contains(&addr) {
             panic!(
                 "Unmapped write to {:04x} = {:02x} at PC {:04x} opcode {:02x} A {:02x} X {:02x} Y {:02x} P {:02x} SP {:02x}",
