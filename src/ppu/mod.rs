@@ -321,7 +321,8 @@ impl Ppu {
 
         for sprite in &self.sprites {
             let sprite_x = sprite.x as i16;
-            if x as i16 < sprite_x || x as i16 >= sprite_x + 8 {
+            let x_i16 = x as i16;
+            if x_i16 < sprite_x || x_i16 >= sprite_x + 8 {
                 continue;
             }
 
@@ -352,7 +353,7 @@ impl Ppu {
             let low = self.vram.read(addr);
             let high = self.vram.read(addr + 8);
 
-            let mut col = (x as i16 - sprite_x) as u8;
+            let mut col = (x_i16 - sprite_x) as u8;
             if sprite.attr & 0x40 != 0 {
                 col = 7 - col;
             }
