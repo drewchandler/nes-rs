@@ -198,11 +198,12 @@ impl Cpu {
             }
             AddressingMode::IndirectX => {
                 let zero_page_addr = self.read_pc(interconnect);
-                interconnect.read_double(zero_page_addr.overflowing_add(self.x).0 as u16)
+                let base = zero_page_addr.overflowing_add(self.x).0;
+                self.read_zero_page_addr(interconnect, base)
             }
             AddressingMode::IndirectY => {
                 let zero_page_addr = self.read_pc(interconnect);
-                let addr = interconnect.read_double(zero_page_addr as u16);
+                let addr = self.read_zero_page_addr(interconnect, zero_page_addr);
                 addr + self.y as u16
             }
             AddressingMode::ZeroPage => self.read_pc(interconnect) as u16,
@@ -232,6 +233,12 @@ impl Cpu {
         let value = interconnect.read_word(self.pc);
         self.pc += 1;
         value
+    }
+
+    fn read_zero_page_addr(&mut self, interconnect: &mut dyn Interconnect, addr: u8) -> u16 {
+        let low = interconnect.read_word(addr as u16) as u16;
+        let high = interconnect.read_word(addr.wrapping_add(1) as u16) as u16;
+        (high << 8) | low
     }
 
     fn write_word(&self, interconnect: &mut dyn Interconnect, addr: u16, value: u8) -> bool {
