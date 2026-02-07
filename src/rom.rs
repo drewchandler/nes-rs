@@ -66,10 +66,10 @@ impl Rom {
         }
 
         Ok(Rom {
-            prg_rom: prg_rom,
-            chr_rom: chr_rom,
-            mapper: mapper,
-            mirroring: mirroring,
+            prg_rom,
+            chr_rom,
+            mapper,
+            mirroring,
             chr_ram_size: if chr_size == 0 { 8192 } else { 0 },
         })
     }

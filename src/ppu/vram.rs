@@ -22,11 +22,11 @@ impl Vram {
         };
 
         Vram {
-            chr: chr,
-            chr_is_ram: chr_is_ram,
+            chr,
+            chr_is_ram,
             nametable: vec![0u8; nametable_size],
             palette: [0u8; 32],
-            mirroring: mirroring,
+            mirroring,
         }
     }
 

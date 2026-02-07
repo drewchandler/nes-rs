@@ -33,10 +33,7 @@ pub struct CycleResult {
 
 impl CycleResult {
     fn new(end_frame: bool, nmi: bool) -> CycleResult {
-        CycleResult {
-            end_frame: end_frame,
-            nmi: nmi,
-        }
+        CycleResult { end_frame, nmi }
     }
 }
 
