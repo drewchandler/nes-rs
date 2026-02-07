@@ -264,11 +264,6 @@ impl Cpu {
         value
     }
 
-    fn read_zero_page_addr(&mut self, interconnect: &mut dyn Interconnect, addr: u8) -> u16 {
-        let (addr, _, _) = self.read_zero_page_ptr(interconnect, addr);
-        addr
-    }
-
     fn read_zero_page_ptr(
         &mut self,
         interconnect: &mut dyn Interconnect,
