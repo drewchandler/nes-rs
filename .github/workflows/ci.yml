@@ -34,44 +34,6 @@ jobs:
             libxext-dev \
             libxfixes-dev
 
-      - name: Download test ROMs
-        run: |
-          python3 - <<'PY'
-          import hashlib
-          import os
-          import pathlib
-          import tomllib
-          import urllib.request
-
-          with open("tests/roms.toml", "rb") as handle:
-              data = tomllib.load(handle)
-
-          commit = data.get("commit")
-          if not commit:
-              raise SystemExit("Missing commit in tests/roms.toml")
-
-          base_url = f"https://raw.githubusercontent.com/christopherpow/nes-test-roms/{commit}/"
-          rom_dir = pathlib.Path("test-roms")
-          rom_dir.mkdir(parents=True, exist_ok=True)
-
-          for rom in data.get("roms", []):
-              path = rom["path"]
-              expected = rom["sha256"].lower()
-              url = base_url + path
-              dest = rom_dir / path
-              dest.parent.mkdir(parents=True, exist_ok=True)
-              with urllib.request.urlopen(url) as response:
-                  content = response.read()
-              actual = hashlib.sha256(content).hexdigest()
-              if actual != expected:
-                  raise SystemExit(f"SHA mismatch for {path}: expected {expected}, got {actual}")
-              dest.write_bytes(content)
-
-          env_file = os.environ["GITHUB_ENV"]
-          with open(env_file, "a", encoding="utf-8") as handle:
-              handle.write(f"NES_TEST_ROM_DIR={rom_dir.resolve()}\n")
-          PY
-
       - name: Check formatting
         run: cargo fmt --all -- --check
 
