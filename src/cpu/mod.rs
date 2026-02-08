@@ -1680,6 +1680,20 @@ mod tests {
                 assert_eq!(cpu.p, ZERO_FLAG);
             }
         );
+
+        test_prg!(
+            vec![
+                vec![0xa2, 0x01],       /* LDX #$01 */
+                vec![0xa9, 0x10],       /* LDA #$10 */
+                vec![0x8d, 0x01, 0x20], /* STA $2001 */
+                vec![0xa9, 0x08],       /* LDA #$08 */
+                vec![0x1d, 0x00, 0x20]  /* ORA $2000,X */
+            ],
+            |_, cpu: Cpu| {
+                assert_eq!(cpu.a, 0x18);
+                assert_eq!(cpu.p, 0);
+            }
+        );
     }
 
     #[test]
