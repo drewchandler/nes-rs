@@ -874,4 +874,16 @@ mod tests {
 
         assert_eq!(ppu.read_spr_ram_data(), 0x7b);
     }
+
+    #[test]
+    fn test_scroll_sync_from_ppuscroll() {
+        let mut ppu = new_test_ppu();
+
+        ppu.write_ctrl(0x03);
+        ppu.write_scroll(0x05);
+        ppu.write_scroll(0x08);
+
+        assert_eq!(ppu.scroll_x, 256 + 5);
+        assert_eq!(ppu.scroll_y, 248);
+    }
 }
