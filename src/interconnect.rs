@@ -4,6 +4,7 @@ use mapper::unrom::Unrom;
 use mapper::Mapper;
 use ppu::Ppu;
 use rom::Rom;
+use std::env;
 
 pub trait Interconnect {
     fn read_double(&mut self, addr: u16) -> u16;
@@ -20,14 +21,8 @@ pub struct MemoryMappingInterconnect {
     pub joypad1: Joypad,
     last_cpu_pc: u16,
     last_cpu_opcode: u8,
-    last_zp_f0: Option<PtrWrite>,
-    last_zp_f1: Option<PtrWrite>,
-}
-
-struct PtrWrite {
-    value: u8,
-    pc: u16,
-    opcode: u8,
+    last_bus_value: u8,
+    trace_expansion: bool,
 }
 
 enum MappedAddress {
@@ -131,47 +126,13 @@ impl MemoryMappingInterconnect {
             joypad1: Joypad::new(),
             last_cpu_pc: 0,
             last_cpu_opcode: 0,
-            last_zp_f0: None,
-            last_zp_f1: None,
+            last_bus_value: 0,
+            trace_expansion: env::var("NES_TRACE_EXPANSION").is_ok(),
         }
     }
 
-    fn check_expansion_access(&self, addr: u16, is_write: bool) {
-        if (0x4020..=0x5fff).contains(&addr) {
-            let access = if is_write { "write" } else { "read" };
-            let f0 = self.ram[0x00f0];
-            let f1 = self.ram[0x00f1];
-            let f0_write = Self::format_ptr_write(&self.last_zp_f0);
-            let f1_write = Self::format_ptr_write(&self.last_zp_f1);
-            panic!(
-                "Expansion {} at {:04x} (pc={:04x} opcode={:02x}) zp_f0={:02x} {} zp_f1={:02x} {}",
-                access, addr, self.last_cpu_pc, self.last_cpu_opcode, f0, f0_write, f1, f1_write
-            );
-        }
-    }
-
-    fn record_zp_pointer_write(&mut self, addr: u16, value: u8) {
-        let mirror = (addr % 0x800) as u16;
-        let entry = PtrWrite {
-            value,
-            pc: self.last_cpu_pc,
-            opcode: self.last_cpu_opcode,
-        };
-        match mirror {
-            0x00f0 => self.last_zp_f0 = Some(entry),
-            0x00f1 => self.last_zp_f1 = Some(entry),
-            _ => {}
-        }
-    }
-
-    fn format_ptr_write(entry: &Option<PtrWrite>) -> String {
-        match *entry {
-            Some(ref entry) => format!(
-                "(last write pc {:04x} opcode {:02x} value {:02x})",
-                entry.pc, entry.opcode, entry.value
-            ),
-            None => "(no write recorded)".to_string(),
-        }
+    fn is_expansion(addr: u16) -> bool {
+        (0x4020..=0x5fff).contains(&addr)
     }
 }
 
@@ -181,8 +142,17 @@ impl Interconnect for MemoryMappingInterconnect {
     }
 
     fn read_word(&mut self, addr: u16) -> u8 {
-        self.check_expansion_access(addr, false);
-        match map_addr(addr) {
+        if MemoryMappingInterconnect::is_expansion(addr) {
+            if self.trace_expansion {
+                println!(
+                    "Expansion read {:04x} (pc={:04x} opcode={:02x}) bus={:02x}",
+                    addr, self.last_cpu_pc, self.last_cpu_opcode, self.last_bus_value
+                );
+            }
+            return self.last_bus_value;
+        }
+
+        let value = match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
             MappedAddress::PpuStatusRegister => self.ppu.read_status(),
@@ -191,16 +161,26 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::Joypad1 => self.joypad1.read(),
             MappedAddress::Joypad2 => 0,
             _ => panic!("Reading from unimplemented memory address: {:x}", addr),
-        }
+        };
+        self.last_bus_value = value;
+        value
     }
 
     fn write_word(&mut self, addr: u16, value: u8) {
-        self.check_expansion_access(addr, true);
-        match map_addr(addr) {
-            MappedAddress::Ram(addr) => {
-                self.record_zp_pointer_write(addr as u16, value);
-                self.ram[addr] = value;
+        if MemoryMappingInterconnect::is_expansion(addr) {
+            if self.trace_expansion {
+                println!(
+                    "Expansion write {:04x} = {:02x} (pc={:04x} opcode={:02x})",
+                    addr, value, self.last_cpu_pc, self.last_cpu_opcode
+                );
             }
+            self.last_bus_value = value;
+            return;
+        }
+
+        self.last_bus_value = value;
+        match map_addr(addr) {
+            MappedAddress::Ram(addr) => self.ram[addr] = value,
             MappedAddress::PrgRom => self.mapper.write(addr, value),
             MappedAddress::PpuControlRegister => self.ppu.write_ctrl(value),
             MappedAddress::PpuMaskRegister => self.ppu.write_mask(value),
@@ -220,12 +200,22 @@ impl Interconnect for MemoryMappingInterconnect {
     }
 
     fn write_double(&mut self, addr: u16, value: u16) {
-        self.check_expansion_access(addr, true);
+        if MemoryMappingInterconnect::is_expansion(addr) {
+            if self.trace_expansion {
+                println!(
+                    "Expansion write {:04x} = {:04x} (pc={:04x} opcode={:02x})",
+                    addr, value, self.last_cpu_pc, self.last_cpu_opcode
+                );
+            }
+            self.last_bus_value = (value >> 8) as u8;
+            return;
+        }
+
         match map_addr(addr) {
             MappedAddress::Ram(addr) => {
-                self.record_zp_pointer_write(addr as u16, value as u8);
-                self.record_zp_pointer_write(addr as u16 + 1, (value >> 8) as u8);
+                self.last_bus_value = value as u8;
                 self.ram[addr] = value as u8;
+                self.last_bus_value = (value >> 8) as u8;
                 self.ram[addr + 1] = (value >> 8) as u8;
             }
             _ => {
