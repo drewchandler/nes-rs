@@ -8,6 +8,8 @@ const CTRL_SPRITE_PATTERN_FLAG: u8 = 0x08;
 const CTRL_BACKGROUND_FLAG: u8 = 0x10;
 const CTRL_SPRITE_SIZE_FLAG: u8 = 0x20;
 const CTRL_NMI_FLAG: u8 = 0x80;
+const MASK_SHOW_BG_LEFT: u8 = 0x02;
+const MASK_SHOW_SPRITES_LEFT: u8 = 0x04;
 const MASK_DISPLAY_BACKGROUND: u8 = 0x08;
 const MASK_DISPLAY_SPRITES: u8 = 0x10;
 const STATUS_SPRITE_OVERFLOW_FLAG: u8 = 0x20;
@@ -42,32 +44,39 @@ pub struct Ppu {
     mask: u8,
     status: u8,
     spr_ram_addr: u8,
-    scroll: u8,
+    fine_x: u8,
     vram_addr: u16,
     tmp_vram_addr: u16,
     write_flag: bool,
     vram: Vram,
     spr_ram: [u8; 256],
     pub screen: [u32; PIXELS],
-    name_table_byte: u8,
-    attribute_table_byte: u8,
-    low_bg_tile_byte: u8,
-    high_bg_tile_byte: u8,
-    tile_data: u64,
+    bg_shift_low: u16,
+    bg_shift_high: u16,
+    attr_shift_low: u16,
+    attr_shift_high: u16,
+    next_tile_id: u8,
+    next_tile_attr: u8,
+    next_tile_lsb: u8,
+    next_tile_msb: u8,
     buffered_read: u8,
     cycle: u16,
     scanline: i16,
     nmi_queued: bool,
-    sprites: Vec<Sprite>,
-}
-
-#[derive(Clone, Copy)]
-struct Sprite {
-    y: u8,
-    tile: u8,
-    attr: u8,
-    x: u8,
-    index: u8,
+    open_bus: u8,
+    odd_frame: bool,
+    sprite_count: usize,
+    sprite_x: [u8; 8],
+    sprite_attr: [u8; 8],
+    sprite_shift_low: [u8; 8],
+    sprite_shift_high: [u8; 8],
+    sprite_index: [u8; 8],
+    next_sprite_count: usize,
+    next_sprite_x: [u8; 8],
+    next_sprite_attr: [u8; 8],
+    next_sprite_shift_low: [u8; 8],
+    next_sprite_shift_high: [u8; 8],
+    next_sprite_index: [u8; 8],
 }
 
 impl Ppu {
@@ -77,31 +86,48 @@ impl Ppu {
             mask: 0,
             status: 0,
             spr_ram_addr: 0,
-            scroll: 0,
+            fine_x: 0,
             vram_addr: 0,
             tmp_vram_addr: 0,
             write_flag: false,
             vram: Vram::new(chr_rom, chr_ram_size, mirroring),
             spr_ram: [0; 256],
             screen: [0; PIXELS],
-            name_table_byte: 0,
-            attribute_table_byte: 0,
-            low_bg_tile_byte: 0,
-            high_bg_tile_byte: 0,
-            tile_data: 0,
+            bg_shift_low: 0,
+            bg_shift_high: 0,
+            attr_shift_low: 0,
+            attr_shift_high: 0,
+            next_tile_id: 0,
+            next_tile_attr: 0,
+            next_tile_lsb: 0,
+            next_tile_msb: 0,
             buffered_read: 0,
             cycle: 0,
             scanline: -1,
             nmi_queued: false,
-            sprites: Vec::with_capacity(8),
+            open_bus: 0,
+            odd_frame: false,
+            sprite_count: 0,
+            sprite_x: [0; 8],
+            sprite_attr: [0; 8],
+            sprite_shift_low: [0; 8],
+            sprite_shift_high: [0; 8],
+            sprite_index: [0; 8],
+            next_sprite_count: 0,
+            next_sprite_x: [0; 8],
+            next_sprite_attr: [0; 8],
+            next_sprite_shift_low: [0; 8],
+            next_sprite_shift_high: [0; 8],
+            next_sprite_index: [0; 8],
         }
     }
 
     pub fn read_status(&mut self) -> u8 {
-        let status = self.status;
+        let status = (self.status & 0xE0) | (self.open_bus & 0x1F);
 
         self.set_vblank(false);
         self.write_flag = false;
+        self.open_bus = status;
 
         status
     }
@@ -109,6 +135,7 @@ impl Ppu {
     pub fn write_ctrl(&mut self, value: u8) {
         let prev_nmi = self.nmi_flag();
         self.ctrl = value;
+        self.open_bus = value;
         self.tmp_vram_addr = self.tmp_vram_addr & 0xf3ff | ((value as u16) & 0x03) << 10;
         if !prev_nmi && self.nmi_flag() && self.status & STATUS_VBLANK_FLAG != 0 {
             self.nmi_queued = true;
@@ -117,19 +144,24 @@ impl Ppu {
 
     pub fn write_mask(&mut self, value: u8) {
         self.mask = value;
+        self.open_bus = value;
     }
 
     pub fn write_spr_ram_addr(&mut self, value: u8) {
         self.spr_ram_addr = value;
+        self.open_bus = value;
     }
 
     pub fn write_spr_ram_data(&mut self, value: u8) {
         self.spr_ram[self.spr_ram_addr as usize] = value;
         self.spr_ram_addr = self.spr_ram_addr.overflowing_add(1).0;
+        self.open_bus = value;
     }
 
-    pub fn read_spr_ram_data(&self) -> u8 {
-        self.spr_ram[self.spr_ram_addr as usize]
+    pub fn read_spr_ram_data(&mut self) -> u8 {
+        let value = self.spr_ram[self.spr_ram_addr as usize];
+        self.open_bus = value;
+        value
     }
 
     pub fn write_scroll(&mut self, value: u8) {
@@ -139,11 +171,12 @@ impl Ppu {
                 | ((value as u16) & 0x38) << 2
                 | ((value as u16) & 0xc0) << 2;
         } else {
-            self.scroll = value & 0x07;
+            self.fine_x = value & 0x07;
             self.tmp_vram_addr = (self.tmp_vram_addr & 0xffe0) | (value as u16) >> 3;
         }
 
         self.write_flag = !self.write_flag;
+        self.open_bus = value;
     }
 
     pub fn write_vram_addr(&mut self, value: u8) {
@@ -155,12 +188,14 @@ impl Ppu {
         }
 
         self.write_flag = !self.write_flag;
+        self.open_bus = value;
     }
 
     pub fn write_vram_data(&mut self, value: u8) {
         let addr = self.vram_addr;
         self.vram.write(addr, value);
         self.incr_vram_addr();
+        self.open_bus = value;
     }
 
     pub fn read_vram_data(&mut self) -> u8 {
@@ -175,6 +210,7 @@ impl Ppu {
         };
 
         self.incr_vram_addr();
+        self.open_bus = value;
 
         value
     }
@@ -186,25 +222,32 @@ impl Ppu {
 
     pub fn step(&mut self) -> CycleResult {
         let mut nmi = false;
+        let rendering = self.rendering_enabled();
 
-        if self.rendering_enabled() {
-            match self.scanline {
-                0..=239 => {
-                    self.process_render_scanline();
-                    self.process_fetch_scanline();
+        if rendering {
+            if self.scanline >= 0 && self.scanline <= 239 && self.cycle >= 1 && self.cycle <= 256
+            {
+                self.render_pixel();
+            }
 
-                    if self.cycle == 257 {
-                        self.vram_addr = (self.vram_addr & 0xFBE0) | (self.tmp_vram_addr & 0x041F);
-                    }
+            if (self.scanline >= -1 && self.scanline <= 239) || self.scanline == 261 {
+                if (self.cycle >= 1 && self.cycle <= 256)
+                    || (self.cycle >= 321 && self.cycle <= 336)
+                {
+                    self.shift_background_shifters();
+                    self.fetch_background();
                 }
-                -1 | 261 => {
-                    self.process_fetch_scanline();
 
-                    if self.cycle >= 280 && self.cycle <= 304 {
-                        self.vram_addr = (self.vram_addr & 0x841F) | (self.tmp_vram_addr & 0x7BE0);
-                    }
+                if self.cycle == 256 {
+                    self.increment_y();
+                } else if self.cycle == 257 {
+                    self.copy_horizontal();
+                    self.evaluate_sprites(self.scanline + 1);
                 }
-                _ => {}
+
+                if self.scanline == 261 && self.cycle >= 280 && self.cycle <= 304 {
+                    self.copy_vertical();
+                }
             }
         }
 
@@ -231,81 +274,117 @@ impl Ppu {
         self.display_background() || self.display_sprites()
     }
 
-    fn process_render_scanline(&mut self) {
+    fn show_bg_left(&self) -> bool {
+        self.mask & MASK_SHOW_BG_LEFT != 0
+    }
+
+    fn show_sprites_left(&self) -> bool {
+        self.mask & MASK_SHOW_SPRITES_LEFT != 0
+    }
+
+    fn copy_horizontal(&mut self) {
+        self.vram_addr = (self.vram_addr & 0xFBE0) | (self.tmp_vram_addr & 0x041F);
+    }
+
+    fn copy_vertical(&mut self) {
+        self.vram_addr = (self.vram_addr & 0x841F) | (self.tmp_vram_addr & 0x7BE0);
+    }
+
+    fn render_pixel(&mut self) {
         if self.cycle < 1 || self.cycle > 256 {
             return;
         }
 
-        if self.cycle == 1 {
-            self.evaluate_sprites();
-        }
-
         let x = (self.cycle - 1) as u8;
-        let y = self.scanline as u8;
+        let bit = 0x8000 >> self.fine_x;
 
-        let mut bg_pixel = 0u8;
-        let mut color = SYSTEM_PALETTE[(self.vram.read(0x3f00) % 64) as usize];
-
-        if self.display_background() {
-            let shift = 32 + (7 - self.scroll) * 4;
-            bg_pixel = ((self.tile_data >> shift) & 0x0f) as u8;
-            let bg_color_addr = if bg_pixel & 0x03 == 0 {
-                0x3f00
-            } else {
-                0x3f00 | bg_pixel as u16
-            };
-            let bg_palette_index = self.vram.read(bg_color_addr);
-            color = SYSTEM_PALETTE[(bg_palette_index % 64) as usize];
+        let (mut bg_pixel, mut bg_palette) = (0u8, 0u8);
+        if self.display_background() && (self.show_bg_left() || x >= 8) {
+            let low = if (self.bg_shift_low & bit) != 0 { 1 } else { 0 };
+            let high = if (self.bg_shift_high & bit) != 0 { 2 } else { 0 };
+            bg_pixel = low | high;
+            let attr_low = if (self.attr_shift_low & bit) != 0 { 1 } else { 0 };
+            let attr_high = if (self.attr_shift_high & bit) != 0 { 2 } else { 0 };
+            bg_palette = attr_low | attr_high;
         }
 
-        if self.display_sprites() {
-            if let Some((sprite_color, behind_bg, sprite0)) = self.sprite_pixel(x, y) {
-                let bg_opaque = bg_pixel & 0x03 != 0;
+        let mut color = self.map_color(self.vram.read(0x3f00));
+        if bg_pixel != 0 {
+            let bg_color_addr = 0x3f00 + ((bg_palette as u16) << 2) + bg_pixel as u16;
+            let bg_palette_index = self.vram.read(bg_color_addr);
+            color = self.map_color(bg_palette_index);
+        }
+
+        if self.display_sprites() && (self.show_sprites_left() || x >= 8) {
+            if let Some((sprite_pixel, sprite_palette, behind_bg, sprite0)) =
+                self.sprite_pixel()
+            {
+                let bg_opaque = bg_pixel != 0;
                 if !behind_bg || !bg_opaque {
-                    color = sprite_color;
+                    let sprite_addr =
+                        0x3f10 + ((sprite_palette as u16) << 2) + sprite_pixel as u16;
+                    let sprite_index = self.vram.read(sprite_addr);
+                    color = self.map_color(sprite_index);
                 }
+
                 if sprite0 && bg_opaque && self.display_background() {
-                    self.status |= STATUS_SPRITE0_HIT_FLAG;
+                    if (self.show_bg_left() && self.show_sprites_left()) || x >= 8 {
+                        self.status |= STATUS_SPRITE0_HIT_FLAG;
+                    }
                 }
             }
         }
 
         self.screen[256 * self.scanline as usize + self.cycle as usize - 1] = color;
+
+        if self.display_sprites() {
+            self.update_sprite_shifters();
+        }
     }
 
-    fn process_fetch_scanline(&mut self) {
-        match self.cycle {
-            1..=256 | 321..=336 => self.fetch_bg_data(),
-            257 => self.increment_y(),
-            320 => {}
+    fn shift_background_shifters(&mut self) {
+        self.bg_shift_low <<= 1;
+        self.bg_shift_high <<= 1;
+        self.attr_shift_low <<= 1;
+        self.attr_shift_high <<= 1;
+    }
+
+    fn fetch_background(&mut self) {
+        match self.cycle % 8 {
+            1 => self.fetch_name_table_byte(),
+            3 => self.fetch_attribute_table_byte(),
+            5 => self.fetch_low_bg_tile_byte(),
+            7 => self.fetch_high_bg_tile_byte(),
+            0 => {
+                self.load_background_shifters();
+                self.increment_x();
+            }
             _ => {}
         }
     }
 
-    fn evaluate_sprites(&mut self) {
-        self.sprites.clear();
+    fn evaluate_sprites(&mut self, target_scanline: i16) {
+        self.next_sprite_count = 0;
 
-        let sprite_height = self.sprite_height() as i16;
-        if self.scanline < 0 || self.scanline > 239 {
+        if target_scanline < 0 || target_scanline > 239 {
             return;
         }
 
+        let sprite_height = self.sprite_height() as i16;
         let mut count = 0;
+
         for i in 0..64 {
             let base = i * 4;
             let y = self.spr_ram[base] as i16;
-            let sprite_y = y + 1;
-            let row = self.scanline - sprite_y;
+            let row = target_scanline - (y + 1);
             if row >= 0 && row < sprite_height {
                 count += 1;
-                if self.sprites.len() < 8 {
-                    self.sprites.push(Sprite {
-                        y: self.spr_ram[base],
-                        tile: self.spr_ram[base + 1],
-                        attr: self.spr_ram[base + 2],
-                        x: self.spr_ram[base + 3],
-                        index: i as u8,
-                    });
+                if self.next_sprite_count < 8 {
+                    let idx = self.next_sprite_count;
+                    self.next_sprite_index[idx] = i as u8;
+                    self.next_sprite_attr[idx] = self.spr_ram[base + 2];
+                    self.next_sprite_x[idx] = self.spr_ram[base + 3];
+                    self.next_sprite_count += 1;
                 }
             }
         }
@@ -313,90 +392,92 @@ impl Ppu {
         if count > 8 {
             self.status |= STATUS_SPRITE_OVERFLOW_FLAG;
         }
-    }
 
-    fn sprite_pixel(&self, x: u8, y: u8) -> Option<(u32, bool, bool)> {
-        let sprite_height = self.sprite_height() as i16;
+        for i in 0..self.next_sprite_count {
+            let sprite_idx = self.next_sprite_index[i] as usize;
+            let base = sprite_idx * 4;
+            let y = self.spr_ram[base] as i16;
+            let tile = self.spr_ram[base + 1];
+            let attr = self.spr_ram[base + 2];
+            let mut row = target_scanline - (y + 1);
 
-        for sprite in &self.sprites {
-            let sprite_x = sprite.x as i16;
-            let x_i16 = x as i16;
-            if x_i16 < sprite_x || x_i16 >= sprite_x + 8 {
-                continue;
-            }
-
-            let sprite_y = sprite.y as i16 + 1;
-            let mut row = y as i16 - sprite_y;
-            if row < 0 || row >= sprite_height {
-                continue;
-            }
-
-            if sprite.attr & 0x80 != 0 {
+            if attr & 0x80 != 0 {
                 row = sprite_height - 1 - row;
             }
 
             let (tile, row_in_tile, table_base) = if sprite_height == 16 {
-                let mut tile = sprite.tile & 0xFE;
+                let bank = tile & 0x01;
+                let mut tile = tile & 0xFE;
                 let mut row_in_tile = row as u8;
                 if row_in_tile >= 8 {
                     tile = tile.wrapping_add(1);
                     row_in_tile -= 8;
                 }
-                let table_base = if sprite.tile & 0x01 == 0 { 0 } else { 0x1000 };
+                let table_base = if bank == 0 { 0 } else { 0x1000 };
                 (tile, row_in_tile, table_base)
             } else {
-                (sprite.tile, row as u8, self.sprite_pattern_table())
+                (tile, row as u8, self.sprite_pattern_table())
             };
 
             let addr = table_base + (tile as u16) * 16 + row_in_tile as u16;
-            let low = self.vram.read(addr);
-            let high = self.vram.read(addr + 8);
+            let mut low = self.vram.read(addr);
+            let mut high = self.vram.read(addr + 8);
 
-            let mut col = (x_i16 - sprite_x) as u8;
-            if sprite.attr & 0x40 != 0 {
-                col = 7 - col;
+            if attr & 0x40 != 0 {
+                low = reverse_byte(low);
+                high = reverse_byte(high);
             }
 
-            let bit = 7 - col;
-            let low_bit = (low >> bit) & 1;
-            let high_bit = (high >> bit) & 1;
-            let color = (high_bit << 1) | low_bit;
+            self.next_sprite_shift_low[i] = low;
+            self.next_sprite_shift_high[i] = high;
+        }
+    }
 
-            if color == 0 {
+    fn sprite_pixel(&self) -> Option<(u8, u8, bool, bool)> {
+        for i in 0..self.sprite_count {
+            if self.sprite_x[i] != 0 {
                 continue;
             }
 
-            let palette = sprite.attr & 0x03;
-            let palette_addr = 0x3f10 + (palette as u16) * 4 + color as u16;
-            let palette_index = self.vram.read(palette_addr);
-            let sprite_color = SYSTEM_PALETTE[(palette_index % 64) as usize];
-            let behind_bg = sprite.attr & 0x20 != 0;
-            let sprite0 = sprite.index == 0;
-            return Some((sprite_color, behind_bg, sprite0));
+            let low = (self.sprite_shift_low[i] & 0x80) >> 7;
+            let high = (self.sprite_shift_high[i] & 0x80) >> 6;
+            let pixel = low | high;
+            if pixel == 0 {
+                continue;
+            }
+
+            let palette = self.sprite_attr[i] & 0x03;
+            let behind_bg = self.sprite_attr[i] & 0x20 != 0;
+            let sprite0 = self.sprite_index[i] == 0;
+            return Some((pixel, palette, behind_bg, sprite0));
         }
 
         None
     }
 
-    fn fetch_bg_data(&mut self) {
-        self.tile_data <<= 4;
-
-        match self.cycle % 8 {
-            1 => self.fetch_name_table_byte(),
-            3 => self.fetch_attribute_table_byte(),
-            5 => self.fetch_low_bg_tile_byte(),
-            7 => self.fetch_high_bg_tile_byte(),
-            0 => {
-                self.push_tile_data();
-                self.increment_x();
+    fn update_sprite_shifters(&mut self) {
+        for i in 0..self.sprite_count {
+            if self.sprite_x[i] > 0 {
+                self.sprite_x[i] = self.sprite_x[i].wrapping_sub(1);
+            } else {
+                self.sprite_shift_low[i] <<= 1;
+                self.sprite_shift_high[i] <<= 1;
             }
-            _ => {}
         }
+    }
+
+    fn load_next_sprites(&mut self) {
+        self.sprite_count = self.next_sprite_count;
+        self.sprite_x = self.next_sprite_x;
+        self.sprite_attr = self.next_sprite_attr;
+        self.sprite_shift_low = self.next_sprite_shift_low;
+        self.sprite_shift_high = self.next_sprite_shift_high;
+        self.sprite_index = self.next_sprite_index;
     }
 
     fn fetch_name_table_byte(&mut self) {
         let addr = 0x2000 | self.vram_addr & 0x0fff;
-        self.name_table_byte = self.vram.read(addr);
+        self.next_tile_id = self.vram.read(addr);
     }
 
     fn fetch_attribute_table_byte(&mut self) {
@@ -405,37 +486,40 @@ impl Ppu {
             | ((self.vram_addr >> 4) & 0x38)
             | ((self.vram_addr >> 2) & 0x07);
         let shift = ((self.vram_addr >> 4) & 0x04) | (self.vram_addr & 0x02);
-        self.attribute_table_byte = ((self.vram.read(addr) >> shift) & 0x03) << 2;
+        self.next_tile_attr = (self.vram.read(addr) >> shift) & 0x03;
     }
 
     fn fetch_low_bg_tile_byte(&mut self) {
         let fine_y = (self.vram_addr >> 12) & 0x07;
-        let tile = self.name_table_byte as u16;
+        let tile = self.next_tile_id as u16;
         let addr = self.background_pattern_table() + tile * 16 + fine_y;
-        self.low_bg_tile_byte = self.vram.read(addr);
+        self.next_tile_lsb = self.vram.read(addr);
     }
 
     fn fetch_high_bg_tile_byte(&mut self) {
         let fine_y = (self.vram_addr >> 12) & 0x07;
-        let tile = self.name_table_byte as u16;
+        let tile = self.next_tile_id as u16;
         let addr = self.background_pattern_table() + tile * 16 + fine_y + 8;
-        self.high_bg_tile_byte = self.vram.read(addr);
+        self.next_tile_msb = self.vram.read(addr);
     }
 
-    fn push_tile_data(&mut self) {
-        let mut new_tile_data = 0u64;
+    fn load_background_shifters(&mut self) {
+        self.bg_shift_low = (self.bg_shift_low & 0xFF00) | self.next_tile_lsb as u16;
+        self.bg_shift_high = (self.bg_shift_high & 0xFF00) | self.next_tile_msb as u16;
 
-        for _ in 0..8 {
-            let low_byte = (self.low_bg_tile_byte & 0x80) >> 7;
-            let high_byte = (self.high_bg_tile_byte & 0x80) >> 6;
+        let attr_low = if self.next_tile_attr & 0x01 != 0 {
+            0xFF
+        } else {
+            0x00
+        };
+        let attr_high = if self.next_tile_attr & 0x02 != 0 {
+            0xFF
+        } else {
+            0x00
+        };
 
-            self.low_bg_tile_byte <<= 1;
-            self.high_bg_tile_byte <<= 1;
-            new_tile_data =
-                (new_tile_data << 4) | (self.attribute_table_byte | high_byte | low_byte) as u64;
-        }
-
-        self.tile_data |= new_tile_data;
+        self.attr_shift_low = (self.attr_shift_low & 0xFF00) | attr_low;
+        self.attr_shift_high = (self.attr_shift_high & 0xFF00) | attr_high;
     }
 
     fn increment_x(&mut self) {
@@ -469,6 +553,18 @@ impl Ppu {
 
         self.cycle += 1;
 
+        if self.cycle == 340
+            && self.scanline == 261
+            && self.rendering_enabled()
+            && self.odd_frame
+        {
+            self.cycle = 0;
+            self.scanline = 0;
+            self.odd_frame = !self.odd_frame;
+            self.load_next_sprites();
+            return true;
+        }
+
         if self.cycle > 340 {
             self.cycle = 0;
             self.scanline += 1;
@@ -476,6 +572,11 @@ impl Ppu {
             if self.scanline > 261 {
                 self.scanline = 0;
                 end_frame = true;
+                self.odd_frame = !self.odd_frame;
+            }
+
+            if self.scanline >= 0 && self.scanline <= 239 {
+                self.load_next_sprites();
             }
         }
 
@@ -526,6 +627,35 @@ impl Ppu {
         self.mask & MASK_DISPLAY_SPRITES != 0
     }
 
+    fn map_color(&self, palette_index: u8) -> u32 {
+        let mut index = palette_index & 0x3F;
+        if self.mask & 0x01 != 0 {
+            index &= 0x30;
+        }
+        let mut color = SYSTEM_PALETTE[index as usize];
+
+        let emphasis = (self.mask >> 5) & 0x07;
+        if emphasis != 0 {
+            let mut r = ((color >> 16) & 0xFF) as u8;
+            let mut g = ((color >> 8) & 0xFF) as u8;
+            let mut b = (color & 0xFF) as u8;
+
+            if emphasis & 0x01 == 0 {
+                r = ((r as u16) * 3 / 4) as u8;
+            }
+            if emphasis & 0x02 == 0 {
+                g = ((g as u16) * 3 / 4) as u8;
+            }
+            if emphasis & 0x04 == 0 {
+                b = ((b as u16) * 3 / 4) as u8;
+            }
+
+            color = ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+        }
+
+        color
+    }
+
     fn set_vblank(&mut self, value: bool) {
         self.status = if value {
             self.status | STATUS_VBLANK_FLAG
@@ -533,6 +663,15 @@ impl Ppu {
             self.status & !STATUS_VBLANK_FLAG
         };
     }
+}
+
+fn reverse_byte(mut value: u8) -> u8 {
+    let mut reversed = 0u8;
+    for _ in 0..8 {
+        reversed = (reversed << 1) | (value & 1);
+        value >>= 1;
+    }
+    reversed
 }
 
 #[cfg(test)]
@@ -559,7 +698,7 @@ mod tests {
 
         ppu.write_scroll(0x7d);
 
-        assert_eq!(ppu.scroll, 0x05);
+        assert_eq!(ppu.fine_x, 0x05);
         assert_eq!(ppu.tmp_vram_addr, 0x0f);
         assert!(ppu.write_flag);
 
