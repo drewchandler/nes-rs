@@ -225,8 +225,7 @@ impl Ppu {
         let rendering = self.rendering_enabled();
 
         if rendering {
-            if self.scanline >= 0 && self.scanline <= 239 && self.cycle >= 1 && self.cycle <= 256
-            {
+            if self.scanline >= 0 && self.scanline <= 239 && self.cycle >= 1 && self.cycle <= 256 {
                 self.render_pixel();
             }
 
@@ -301,10 +300,22 @@ impl Ppu {
         let (mut bg_pixel, mut bg_palette) = (0u8, 0u8);
         if self.display_background() && (self.show_bg_left() || x >= 8) {
             let low = if (self.bg_shift_low & bit) != 0 { 1 } else { 0 };
-            let high = if (self.bg_shift_high & bit) != 0 { 2 } else { 0 };
+            let high = if (self.bg_shift_high & bit) != 0 {
+                2
+            } else {
+                0
+            };
             bg_pixel = low | high;
-            let attr_low = if (self.attr_shift_low & bit) != 0 { 1 } else { 0 };
-            let attr_high = if (self.attr_shift_high & bit) != 0 { 2 } else { 0 };
+            let attr_low = if (self.attr_shift_low & bit) != 0 {
+                1
+            } else {
+                0
+            };
+            let attr_high = if (self.attr_shift_high & bit) != 0 {
+                2
+            } else {
+                0
+            };
             bg_palette = attr_low | attr_high;
         }
 
@@ -316,13 +327,10 @@ impl Ppu {
         }
 
         if self.display_sprites() && (self.show_sprites_left() || x >= 8) {
-            if let Some((sprite_pixel, sprite_palette, behind_bg, sprite0)) =
-                self.sprite_pixel()
-            {
+            if let Some((sprite_pixel, sprite_palette, behind_bg, sprite0)) = self.sprite_pixel() {
                 let bg_opaque = bg_pixel != 0;
                 if !behind_bg || !bg_opaque {
-                    let sprite_addr =
-                        0x3f10 + ((sprite_palette as u16) << 2) + sprite_pixel as u16;
+                    let sprite_addr = 0x3f10 + ((sprite_palette as u16) << 2) + sprite_pixel as u16;
                     let sprite_index = self.vram.read(sprite_addr);
                     color = self.map_color(sprite_index);
                 }
@@ -553,11 +561,7 @@ impl Ppu {
 
         self.cycle += 1;
 
-        if self.cycle == 340
-            && self.scanline == 261
-            && self.rendering_enabled()
-            && self.odd_frame
-        {
+        if self.cycle == 340 && self.scanline == 261 && self.rendering_enabled() && self.odd_frame {
             self.cycle = 0;
             self.scanline = 0;
             self.odd_frame = !self.odd_frame;
