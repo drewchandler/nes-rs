@@ -14,6 +14,7 @@ pub const NEGATIVE_FLAG: u8 = 0x80;
 
 pub const RESET_VECTOR: u16 = 0xfffc;
 pub const BREAK_VECTOR: u16 = 0xfffe;
+#[allow(dead_code)]
 pub const IRQ_VECTOR: u16 = 0xfffe;
 
 pub const STACK_END: u16 = 0x100;
@@ -78,6 +79,7 @@ impl Cpu {
         self.pc = interconnect.read_double(0xfffa);
     }
 
+    #[allow(dead_code)]
     pub fn irq(&mut self, interconnect: &mut dyn Interconnect) {
         if self.interrupt_disable() {
             return;

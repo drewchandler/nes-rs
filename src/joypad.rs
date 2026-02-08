@@ -36,7 +36,7 @@ impl Joypad {
 
     pub fn write_strobe(&mut self, value: u8) {
         let new_strobe = value & 1 != 0;
-        if new_strobe || (self.strobe && !new_strobe) {
+        if new_strobe || self.strobe {
             self.latch();
         }
         self.strobe = new_strobe;

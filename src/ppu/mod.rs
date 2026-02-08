@@ -335,10 +335,12 @@ impl Ppu {
                     color = self.map_color(sprite_index);
                 }
 
-                if sprite0 && bg_opaque && self.display_background() {
-                    if (self.show_bg_left() && self.show_sprites_left()) || x >= 8 {
-                        self.status |= STATUS_SPRITE0_HIT_FLAG;
-                    }
+                if sprite0
+                    && bg_opaque
+                    && self.display_background()
+                    && ((self.show_bg_left() && self.show_sprites_left()) || x >= 8)
+                {
+                    self.status |= STATUS_SPRITE0_HIT_FLAG;
                 }
             }
         }
@@ -374,7 +376,7 @@ impl Ppu {
     fn evaluate_sprites(&mut self, target_scanline: i16) {
         self.next_sprite_count = 0;
 
-        if target_scanline < 0 || target_scanline > 239 {
+        if !(0..=239).contains(&target_scanline) {
             return;
         }
 
