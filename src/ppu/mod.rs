@@ -182,9 +182,9 @@ impl Ppu {
     pub fn write_vram_addr(&mut self, value: u8) {
         if self.write_flag {
             self.tmp_vram_addr = self.tmp_vram_addr & 0xff00 | value as u16;
-            self.vram_addr = self.tmp_vram_addr;
+            self.vram_addr = self.tmp_vram_addr & 0x3fff;
         } else {
-            self.tmp_vram_addr = (self.tmp_vram_addr & 0x80FF) | ((value as u16) & 0x3F) << 8;
+            self.tmp_vram_addr = (self.tmp_vram_addr & 0x00FF) | ((value as u16) & 0x3F) << 8;
         }
 
         self.write_flag = !self.write_flag;
@@ -757,6 +757,18 @@ mod tests {
 
         assert_eq!(ppu.vram.read(0x2108), 0xaa);
         assert_eq!(ppu.vram.read(0x2108 + 32), 0xab);
+    }
+
+    #[test]
+    fn test_ppuaddr_high_byte_masks_top_bits() {
+        let mut ppu = new_test_ppu();
+        ppu.tmp_vram_addr = 0x8000;
+
+        ppu.read_status();
+        ppu.write_vram_addr(0xff);
+        ppu.write_vram_addr(0x10);
+
+        assert_eq!(ppu.vram_addr, 0x3f10);
     }
 
     #[test]
