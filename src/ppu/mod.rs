@@ -194,7 +194,7 @@ impl Ppu {
     pub fn write_vram_data(&mut self, value: u8) {
         let addr = self.vram_addr;
         self.vram.write(addr, value);
-        self.incr_vram_addr();
+        self.increment_2007();
         self.open_bus = value;
     }
 
@@ -209,15 +209,44 @@ impl Ppu {
             buffered
         };
 
-        self.incr_vram_addr();
+        self.increment_2007();
         self.open_bus = value;
 
         value
     }
 
-    fn incr_vram_addr(&mut self) {
-        let incr = self.addr_increment();
-        self.vram_addr += incr;
+    fn increment_2007(&mut self) {
+        let rendering = self.rendering_enabled() && self.scanline >= 0 && self.scanline <= 239;
+        if rendering {
+            self.increment_y();
+            return;
+        }
+
+        let by32 = self.ctrl & CTRL_INCR_FLAG != 0;
+        let mut fv = (self.vram_addr >> 12) & 0x7;
+        let mut v = (self.vram_addr >> 11) & 0x1;
+        let mut h = (self.vram_addr >> 10) & 0x1;
+        let mut vt = (self.vram_addr >> 5) & 0x1f;
+        let mut ht = self.vram_addr & 0x1f;
+
+        if by32 {
+            vt += 1;
+        } else {
+            ht += 1;
+        }
+
+        vt += (ht >> 5) & 1;
+        h += (vt >> 5) & 1;
+        v += (h >> 1) & 1;
+        fv += (v >> 1) & 1;
+
+        ht &= 0x1f;
+        vt &= 0x1f;
+        h &= 1;
+        v &= 1;
+        fv &= 7;
+
+        self.vram_addr = (fv << 12) | (v << 11) | (h << 10) | (vt << 5) | ht;
     }
 
     pub fn step(&mut self) -> CycleResult {
@@ -589,14 +618,6 @@ impl Ppu {
         end_frame
     }
 
-    fn addr_increment(&self) -> u16 {
-        if self.ctrl & CTRL_INCR_FLAG == 0 {
-            1
-        } else {
-            32
-        }
-    }
-
     fn background_pattern_table(&self) -> u16 {
         if self.ctrl & CTRL_BACKGROUND_FLAG == 0 {
             0
@@ -736,6 +757,18 @@ mod tests {
 
         assert_eq!(ppu.vram.read(0x2108), 0xaa);
         assert_eq!(ppu.vram.read(0x2108 + 32), 0xab);
+    }
+
+    #[test]
+    fn test_ppudata_increment_during_rendering() {
+        let mut ppu = new_test_ppu();
+        ppu.mask = MASK_DISPLAY_BACKGROUND;
+        ppu.scanline = 0;
+        ppu.vram_addr = 0x0000;
+
+        ppu.write_vram_data(0x11);
+
+        assert_eq!(ppu.vram_addr, 0x1000);
     }
 
     #[test]
