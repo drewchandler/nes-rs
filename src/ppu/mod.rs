@@ -45,6 +45,8 @@ pub struct Ppu {
     status: u8,
     spr_ram_addr: u8,
     fine_x: u8,
+    scroll_x: u16,
+    scroll_y: u16,
     vram_addr: u16,
     tmp_vram_addr: u16,
     write_flag: bool,
@@ -87,6 +89,8 @@ impl Ppu {
             status: 0,
             spr_ram_addr: 0,
             fine_x: 0,
+            scroll_x: 0,
+            scroll_y: 0,
             vram_addr: 0,
             tmp_vram_addr: 0,
             write_flag: false,
@@ -137,6 +141,7 @@ impl Ppu {
         self.ctrl = value;
         self.open_bus = value;
         self.tmp_vram_addr = self.tmp_vram_addr & 0xf3ff | ((value as u16) & 0x03) << 10;
+        self.sync_scroll_from_tmp();
         if !prev_nmi && self.nmi_flag() && self.status & STATUS_VBLANK_FLAG != 0 {
             self.nmi_queued = true;
         }
@@ -176,6 +181,7 @@ impl Ppu {
         }
 
         self.write_flag = !self.write_flag;
+        self.sync_scroll_from_tmp();
         self.open_bus = value;
     }
 
@@ -188,6 +194,7 @@ impl Ppu {
         }
 
         self.write_flag = !self.write_flag;
+        self.sync_scroll_from_tmp();
         self.open_bus = value;
     }
 
@@ -324,40 +331,17 @@ impl Ppu {
         }
 
         let x = (self.cycle - 1) as u8;
-        let bit = 0x8000 >> self.fine_x;
-
-        let (mut bg_pixel, mut bg_palette) = (0u8, 0u8);
-        if self.display_background() && (self.show_bg_left() || x >= 8) {
-            let low = if (self.bg_shift_low & bit) != 0 { 1 } else { 0 };
-            let high = if (self.bg_shift_high & bit) != 0 {
-                2
-            } else {
-                0
-            };
-            bg_pixel = low | high;
-            let attr_low = if (self.attr_shift_low & bit) != 0 {
-                1
-            } else {
-                0
-            };
-            let attr_high = if (self.attr_shift_high & bit) != 0 {
-                2
-            } else {
-                0
-            };
-            bg_palette = attr_low | attr_high;
-        }
-
+        let mut bg_opaque = false;
         let mut color = self.map_color(self.vram.read(0x3f00));
-        if bg_pixel != 0 {
-            let bg_color_addr = 0x3f00 + ((bg_palette as u16) << 2) + bg_pixel as u16;
-            let bg_palette_index = self.vram.read(bg_color_addr);
-            color = self.map_color(bg_palette_index);
+        if self.display_background() && (self.show_bg_left() || x >= 8) {
+            if let Some(bg_palette_index) = self.background_pixel_direct(x) {
+                color = self.map_color(bg_palette_index);
+                bg_opaque = true;
+            }
         }
 
         if self.display_sprites() && (self.show_sprites_left() || x >= 8) {
             if let Some((sprite_pixel, sprite_palette, behind_bg, sprite0)) = self.sprite_pixel() {
-                let bg_opaque = bg_pixel != 0;
                 if !behind_bg || !bg_opaque {
                     let sprite_addr = 0x3f10 + ((sprite_palette as u16) << 2) + sprite_pixel as u16;
                     let sprite_index = self.vram.read(sprite_addr);
@@ -379,6 +363,61 @@ impl Ppu {
         if self.display_sprites() {
             self.update_sprite_shifters();
         }
+    }
+
+    fn background_pixel_direct(&mut self, x: u8) -> Option<u8> {
+        let world_x = x as u16 + self.scroll_x;
+        let world_y = self.scanline as u16 + self.scroll_y;
+
+        let x_index = (world_x / 8) % 64;
+        let y_index = (world_y / 8) % 60;
+
+        let base = match (x_index >= 32, y_index >= 30) {
+            (false, false) => 0x2000,
+            (true, false) => 0x2400,
+            (false, true) => 0x2800,
+            (true, true) => 0x2c00,
+        };
+
+        let tile_x = (x_index % 32) as u16;
+        let tile_y = (y_index % 30) as u16;
+        let x_sub = (world_x % 8) as u8;
+        let y_sub = (world_y % 8) as u8;
+
+        let tile = self.vram.read(base + 32 * tile_y + tile_x);
+        let pattern_addr = self.background_pattern_table() + (tile as u16) * 16 + y_sub as u16;
+        let low = self.vram.read(pattern_addr);
+        let high = self.vram.read(pattern_addr + 8);
+        let bit = 7 - x_sub;
+        let color = ((high >> bit) & 1) << 1 | ((low >> bit) & 1);
+        if color == 0 {
+            return None;
+        }
+
+        let group = (tile_y / 4) * 8 + (tile_x / 4);
+        let attr_byte = self.vram.read(base + 0x3c0 + group);
+        let left = tile_x % 4 < 2;
+        let top = tile_y % 4 < 2;
+        let attr = match (left, top) {
+            (true, true) => attr_byte & 0x03,
+            (false, true) => (attr_byte >> 2) & 0x03,
+            (true, false) => (attr_byte >> 4) & 0x03,
+            (false, false) => (attr_byte >> 6) & 0x03,
+        };
+
+        let palette_addr = 0x3f00 + ((attr as u16) << 2) + color as u16;
+        Some(self.vram.read(palette_addr))
+    }
+
+    fn sync_scroll_from_tmp(&mut self) {
+        let coarse_x = (self.tmp_vram_addr & 0x1f) as u16;
+        let coarse_y = ((self.tmp_vram_addr >> 5) & 0x1f) as u16;
+        let nametable_x = ((self.tmp_vram_addr >> 10) & 0x1) as u16;
+        let nametable_y = ((self.tmp_vram_addr >> 11) & 0x1) as u16;
+        let fine_y = ((self.tmp_vram_addr >> 12) & 0x7) as u16;
+
+        self.scroll_x = coarse_x * 8 + self.fine_x as u16 + nametable_x * 256;
+        self.scroll_y = coarse_y * 8 + fine_y + nametable_y * 240;
     }
 
     fn shift_background_shifters(&mut self) {
