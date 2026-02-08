@@ -8,11 +8,13 @@ pub const ZERO_FLAG: u8 = 0x02;
 pub const INTERUPT_DISABLE: u8 = 0x04;
 pub const DECIMAL_MODE: u8 = 0x08;
 pub const BREAK_COMMAND: u8 = 0x10;
+pub const UNUSED_FLAG: u8 = 0x20;
 pub const OVERFLOW_FLAG: u8 = 0x40;
 pub const NEGATIVE_FLAG: u8 = 0x80;
 
 pub const RESET_VECTOR: u16 = 0xfffc;
 pub const BREAK_VECTOR: u16 = 0xfffe;
+pub const IRQ_VECTOR: u16 = 0xfffe;
 
 pub const STACK_END: u16 = 0x100;
 
@@ -44,6 +46,7 @@ pub struct Cpu {
     x: u8,
     y: u8,
     last_opcode: u8,
+    cycles: u64,
 }
 
 impl Cpu {
@@ -56,19 +59,36 @@ impl Cpu {
             x: 0,
             y: 0,
             last_opcode: 0,
+            cycles: 0,
         }
     }
 
     pub fn reset(&mut self, interconnect: &mut dyn Interconnect) {
         self.pc = interconnect.read_double(RESET_VECTOR);
+        self.sp = 0xfd;
+        self.p = INTERUPT_DISABLE | UNUSED_FLAG;
     }
 
     pub fn nmi(&mut self, interconnect: &mut dyn Interconnect) {
         let pc = self.pc;
         self.push_double(interconnect, pc);
-        let p = self.p;
+        let p = self.status_for_stack(false);
         self.push_word(interconnect, p);
+        self.set_interrupt_disable(true);
         self.pc = interconnect.read_double(0xfffa);
+    }
+
+    pub fn irq(&mut self, interconnect: &mut dyn Interconnect) {
+        if self.interrupt_disable() {
+            return;
+        }
+
+        let pc = self.pc;
+        self.push_double(interconnect, pc);
+        let p = self.status_for_stack(false);
+        self.push_word(interconnect, p);
+        self.set_interrupt_disable(true);
+        self.pc = interconnect.read_double(IRQ_VECTOR);
     }
 
     pub fn step(&mut self, interconnect: &mut dyn Interconnect) -> u16 {
@@ -80,7 +100,8 @@ impl Cpu {
 
         macro_rules! with_value {
             ($f:expr) => {{
-                let value = self.value_for(interconnect, &am);
+                let (value, crossed) = self.value_for_with_page_cross(interconnect, &am);
+                page_crossed = crossed;
                 $f(value)
             }};
         }
@@ -93,21 +114,88 @@ impl Cpu {
         }
 
         let mut dma_performed = false;
+        let mut page_crossed = false;
+        let mut branch_taken = false;
+        let mut branch_crossed = false;
 
         match op {
             Op::Adc => with_value!(|value| self.adc(value)),
             Op::And => with_value!(|value| self.and(value)),
             Op::Asl => self.asl(interconnect, am),
-            Op::Bcc => with_addr!(|addr| self.bcc(addr)),
-            Op::Bcs => with_addr!(|addr| self.bcs(addr)),
-            Op::Beq => with_addr!(|addr| self.beq(addr)),
+            Op::Bcc => {
+                let addr = self.addr_for(interconnect, &am);
+                let old_pc = self.pc;
+                self.bcc(addr);
+                if self.pc != old_pc {
+                    branch_taken = true;
+                    branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
+                }
+            }
+            Op::Bcs => {
+                let addr = self.addr_for(interconnect, &am);
+                let old_pc = self.pc;
+                self.bcs(addr);
+                if self.pc != old_pc {
+                    branch_taken = true;
+                    branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
+                }
+            }
+            Op::Beq => {
+                let addr = self.addr_for(interconnect, &am);
+                let old_pc = self.pc;
+                self.beq(addr);
+                if self.pc != old_pc {
+                    branch_taken = true;
+                    branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
+                }
+            }
             Op::Bit => with_value!(|value| self.bit(value)),
-            Op::Bmi => with_addr!(|addr| self.bmi(addr)),
-            Op::Bne => with_addr!(|addr| self.bne(addr)),
-            Op::Bpl => with_addr!(|addr| self.bpl(addr)),
+            Op::Bmi => {
+                let addr = self.addr_for(interconnect, &am);
+                let old_pc = self.pc;
+                self.bmi(addr);
+                if self.pc != old_pc {
+                    branch_taken = true;
+                    branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
+                }
+            }
+            Op::Bne => {
+                let addr = self.addr_for(interconnect, &am);
+                let old_pc = self.pc;
+                self.bne(addr);
+                if self.pc != old_pc {
+                    branch_taken = true;
+                    branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
+                }
+            }
+            Op::Bpl => {
+                let addr = self.addr_for(interconnect, &am);
+                let old_pc = self.pc;
+                self.bpl(addr);
+                if self.pc != old_pc {
+                    branch_taken = true;
+                    branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
+                }
+            }
             Op::Brk => self.brk(interconnect),
-            Op::Bvc => with_addr!(|addr| self.bvc(addr)),
-            Op::Bvs => with_addr!(|addr| self.bvs(addr)),
+            Op::Bvc => {
+                let addr = self.addr_for(interconnect, &am);
+                let old_pc = self.pc;
+                self.bvc(addr);
+                if self.pc != old_pc {
+                    branch_taken = true;
+                    branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
+                }
+            }
+            Op::Bvs => {
+                let addr = self.addr_for(interconnect, &am);
+                let old_pc = self.pc;
+                self.bvs(addr);
+                if self.pc != old_pc {
+                    branch_taken = true;
+                    branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
+                }
+            }
             Op::Clc => self.clc(),
             Op::Cld => self.cld(),
             Op::Cli => self.cli(),
@@ -159,11 +247,24 @@ impl Cpu {
             Op::Txs => self.txs(),
         }
 
-        if dma_performed {
-            512 + CYCLES[opcode as usize]
-        } else {
-            CYCLES[opcode as usize]
+        let mut cycles = CYCLES[opcode as usize];
+        if page_crossed {
+            cycles += 1;
         }
+        if branch_taken {
+            cycles += 1;
+            if branch_crossed {
+                cycles += 1;
+            }
+        }
+        if dma_performed {
+            let dma_start = self.cycles + cycles as u64;
+            let dma_cycles = if dma_start % 2 == 1 { 514 } else { 513 };
+            cycles += dma_cycles;
+        }
+
+        self.cycles += cycles as u64;
+        cycles
     }
 
     fn value_for(&mut self, interconnect: &mut dyn Interconnect, am: &AddressingMode) -> u8 {
@@ -194,7 +295,7 @@ impl Cpu {
             }
             AddressingMode::Indirect => {
                 let addr = self.addr_for(interconnect, &AddressingMode::Absolute);
-                interconnect.read_double(addr)
+                self.read_indirect_addr(interconnect, addr)
             }
             AddressingMode::IndirectX => {
                 let zero_page_addr = self.read_pc(interconnect);
@@ -230,10 +331,67 @@ impl Cpu {
         }
     }
 
+    fn addr_for_with_page_cross(
+        &mut self,
+        interconnect: &mut dyn Interconnect,
+        am: &AddressingMode,
+    ) -> (u16, bool) {
+        match *am {
+            AddressingMode::AbsoluteX => {
+                let base = self.addr_for(interconnect, &AddressingMode::Absolute);
+                let addr = base + self.x as u16;
+                (addr, (base & 0xff00) != (addr & 0xff00))
+            }
+            AddressingMode::AbsoluteY => {
+                let base = self.addr_for(interconnect, &AddressingMode::Absolute);
+                let addr = base + self.y as u16;
+                (addr, (base & 0xff00) != (addr & 0xff00))
+            }
+            AddressingMode::IndirectY => {
+                let zero_page_addr = self.read_pc(interconnect);
+                let (base_addr, _, _) = self.read_zero_page_ptr(interconnect, zero_page_addr);
+                let addr = base_addr + self.y as u16;
+                (addr, (base_addr & 0xff00) != (addr & 0xff00))
+            }
+            _ => (self.addr_for(interconnect, am), false),
+        }
+    }
+
+    fn value_for_with_page_cross(
+        &mut self,
+        interconnect: &mut dyn Interconnect,
+        am: &AddressingMode,
+    ) -> (u8, bool) {
+        match *am {
+            AddressingMode::AbsoluteX | AddressingMode::AbsoluteY | AddressingMode::IndirectY => {
+                let (addr, crossed) = self.addr_for_with_page_cross(interconnect, am);
+                (interconnect.read_word(addr), crossed)
+            }
+            _ => (self.value_for(interconnect, am), false),
+        }
+    }
+
     fn read_pc(&mut self, interconnect: &mut dyn Interconnect) -> u8 {
         let value = interconnect.read_word(self.pc);
         self.pc += 1;
         value
+    }
+
+    fn status_for_stack(&self, break_flag: bool) -> u8 {
+        let mut status = self.p | UNUSED_FLAG;
+        if break_flag {
+            status |= BREAK_COMMAND;
+        } else {
+            status &= !BREAK_COMMAND;
+        }
+        status
+    }
+
+    fn read_indirect_addr(&mut self, interconnect: &mut dyn Interconnect, addr: u16) -> u16 {
+        let low = interconnect.read_word(addr);
+        let high_addr = (addr & 0xff00) | (addr.wrapping_add(1) & 0x00ff);
+        let high = interconnect.read_word(high_addr);
+        ((high as u16) << 8) | low as u16
     }
 
     fn read_zero_page_ptr(
@@ -316,14 +474,6 @@ impl Cpu {
         self.p & BREAK_COMMAND != 0
     }
 
-    fn set_break_command(&mut self, value: bool) {
-        self.p = if value {
-            self.p | BREAK_COMMAND
-        } else {
-            self.p & !BREAK_COMMAND
-        }
-    }
-
     fn overflow_flag(&self) -> bool {
         self.p & OVERFLOW_FLAG != 0
     }
@@ -382,6 +532,7 @@ impl Cpu {
         } else {
             let addr = self.addr_for(interconnect, &am);
             let value = interconnect.read_word(addr);
+            interconnect.write_word(addr, value);
             let result = self.arithmetic_shift_left(value);
             interconnect.write_word(addr, result);
         }
@@ -431,12 +582,12 @@ impl Cpu {
     }
 
     fn brk(&mut self, interconnect: &mut dyn Interconnect) {
-        let pc = self.pc;
+        let pc = self.pc.wrapping_add(1);
         self.push_double(interconnect, pc);
-        let p = self.p;
+        let p = self.status_for_stack(true);
         self.push_word(interconnect, p);
+        self.set_interrupt_disable(true);
         self.pc = interconnect.read_double(BREAK_VECTOR);
-        self.set_break_command(true);
     }
 
     fn bvc(&mut self, addr: u16) {
@@ -483,8 +634,10 @@ impl Cpu {
     }
 
     fn dec(&mut self, interconnect: &mut dyn Interconnect, addr: u16) {
-        let value = self.set_zn(interconnect.read_word(addr).overflowing_sub(1).0);
+        let value = interconnect.read_word(addr);
         interconnect.write_word(addr, value);
+        let result = self.set_zn(value.overflowing_sub(1).0);
+        interconnect.write_word(addr, result);
     }
 
     fn dex(&mut self) {
@@ -503,8 +656,10 @@ impl Cpu {
     }
 
     fn inc(&mut self, interconnect: &mut dyn Interconnect, addr: u16) {
-        let value = self.set_zn(interconnect.read_word(addr).overflowing_add(1).0);
+        let value = interconnect.read_word(addr);
         interconnect.write_word(addr, value);
+        let result = self.set_zn(value.overflowing_add(1).0);
+        interconnect.write_word(addr, result);
     }
 
     fn inx(&mut self) {
@@ -546,6 +701,7 @@ impl Cpu {
         } else {
             let addr = self.addr_for(interconnect, &am);
             let value = interconnect.read_word(addr);
+            interconnect.write_word(addr, value);
             let result = self.logical_shift_right(value);
             interconnect.write_word(addr, result);
         }
@@ -562,7 +718,7 @@ impl Cpu {
     }
 
     fn php(&mut self, interconnect: &mut dyn Interconnect) {
-        let p = self.p;
+        let p = self.status_for_stack(true);
         self.push_word(interconnect, p);
     }
 
@@ -572,7 +728,7 @@ impl Cpu {
     }
 
     fn plp(&mut self, interconnect: &mut dyn Interconnect) {
-        self.p = self.pop_word(interconnect);
+        self.p = self.pop_word(interconnect) | UNUSED_FLAG;
     }
 
     fn rol(&mut self, interconnect: &mut dyn Interconnect, am: AddressingMode) {
@@ -582,6 +738,7 @@ impl Cpu {
         } else {
             let addr = self.addr_for(interconnect, &am);
             let value = interconnect.read_word(addr);
+            interconnect.write_word(addr, value);
             let result = self.rotate_left(value);
             interconnect.write_word(addr, result);
         }
@@ -594,13 +751,14 @@ impl Cpu {
         } else {
             let addr = self.addr_for(interconnect, &am);
             let value = interconnect.read_word(addr);
+            interconnect.write_word(addr, value);
             let result = self.rotate_right(value);
             interconnect.write_word(addr, result);
         }
     }
 
     fn rti(&mut self, interconnect: &mut dyn Interconnect) {
-        self.p = self.pop_word(interconnect);
+        self.p = self.pop_word(interconnect) | UNUSED_FLAG;
         self.pc = self.pop_double(interconnect);
     }
 
@@ -771,6 +929,7 @@ mod tests {
                 interconnect.write_word(RESET_ADDR + i as u16, *v);
             }
             cpu.reset(&mut interconnect);
+            cpu.p = 0;
 
             for _ in $prg.iter() {
                 cpu.step(&mut interconnect);
@@ -778,6 +937,38 @@ mod tests {
 
             $verify(&mut interconnect, cpu);
         }};
+    }
+
+    #[test]
+    fn test_reset_sets_flags() {
+        let mut interconnect = TestInterconnect::new();
+        let mut cpu = Cpu::new();
+
+        interconnect.write_double(RESET_VECTOR, RESET_ADDR);
+        cpu.reset(&mut interconnect);
+
+        assert_eq!(cpu.pc, RESET_ADDR);
+        assert_eq!(cpu.sp, 0xfd);
+        assert_eq!(cpu.p, INTERUPT_DISABLE | UNUSED_FLAG);
+    }
+
+    #[test]
+    fn test_jmp_indirect_wrap_bug() {
+        let mut interconnect = TestInterconnect::new();
+        let mut cpu = Cpu::new();
+
+        interconnect.write_double(RESET_VECTOR, RESET_ADDR);
+        interconnect.write_word(RESET_ADDR, 0x6c); // JMP ($00ff)
+        interconnect.write_word(RESET_ADDR + 1, 0xff);
+        interconnect.write_word(RESET_ADDR + 2, 0x00);
+
+        interconnect.write_word(0x00ff, 0x34);
+        interconnect.write_word(0x0000, 0x12);
+
+        cpu.reset(&mut interconnect);
+        cpu.step(&mut interconnect);
+
+        assert_eq!(cpu.pc, 0x1234);
     }
 
     #[test]
@@ -1087,9 +1278,12 @@ mod tests {
             ],
             |interconnect: &mut TestInterconnect, cpu: Cpu| {
                 assert_eq!(cpu.pc, BREAK_ADDR);
-                assert_eq!(cpu.p, NEGATIVE_FLAG + BREAK_COMMAND);
-                assert_eq!(interconnect.read_double(STACK_END + 0xfe), RESET_ADDR + 4);
-                assert_eq!(interconnect.read_word(STACK_END + 0xfd), NEGATIVE_FLAG);
+                assert_eq!(cpu.p, NEGATIVE_FLAG + INTERUPT_DISABLE);
+                assert_eq!(interconnect.read_double(STACK_END + 0xfe), RESET_ADDR + 5);
+                assert_eq!(
+                    interconnect.read_word(STACK_END + 0xfd),
+                    NEGATIVE_FLAG + BREAK_COMMAND + UNUSED_FLAG
+                );
             }
         );
     }
@@ -1719,7 +1913,7 @@ mod tests {
             |interconnect: &mut TestInterconnect, cpu: Cpu| {
                 assert_eq!(
                     interconnect.read_word(STACK_END + cpu.sp as u16 + 1),
-                    NEGATIVE_FLAG
+                    NEGATIVE_FLAG + BREAK_COMMAND + UNUSED_FLAG
                 );
             }
         );
@@ -1751,7 +1945,7 @@ mod tests {
                 vec![0x28]        /* PLP */
             ],
             |_, cpu: Cpu| {
-                assert_eq!(cpu.p, NEGATIVE_FLAG);
+                assert_eq!(cpu.p, NEGATIVE_FLAG + BREAK_COMMAND + UNUSED_FLAG);
             }
         );
     }
@@ -1848,8 +2042,8 @@ mod tests {
                 vec![0x40]                                      /* RTI */
             ],
             |_, cpu: Cpu| {
-                assert_eq!(cpu.p, ZERO_FLAG);
-                assert_eq!(cpu.pc, 0xc00d);
+                assert_eq!(cpu.p, ZERO_FLAG + BREAK_COMMAND + UNUSED_FLAG);
+                assert_eq!(cpu.pc, 0xc00e);
             }
         );
     }
