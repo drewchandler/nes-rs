@@ -232,12 +232,6 @@ impl Interconnect for MemoryMappingInterconnect {
             | MappedAddress::PapuSoundVerticalClockSignalRegister
             | MappedAddress::Joypad2
             | MappedAddress::ApuTestRegister => {}
-            _ => {
-                println!(
-                    "WARNING: Writing to unimplemented memory address: {:x}",
-                    addr
-                )
-            }
         }
     }
 

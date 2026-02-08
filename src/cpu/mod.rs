@@ -99,9 +99,9 @@ impl Cpu {
         let Instruction(op, am) = Instruction::from_opcode(opcode);
 
         macro_rules! with_value {
-            ($f:expr) => {{
+            ($crossed:expr, $f:expr) => {{
                 let (value, crossed) = self.value_for_with_page_cross(interconnect, &am);
-                page_crossed = crossed;
+                *$crossed = crossed;
                 $f(value)
             }};
         }
@@ -119,8 +119,8 @@ impl Cpu {
         let mut branch_crossed = false;
 
         match op {
-            Op::Adc => with_value!(|value| self.adc(value)),
-            Op::And => with_value!(|value| self.and(value)),
+            Op::Adc => with_value!(&mut page_crossed, |value| self.adc(value)),
+            Op::And => with_value!(&mut page_crossed, |value| self.and(value)),
             Op::Asl => self.asl(interconnect, am),
             Op::Bcc => {
                 let addr = self.addr_for(interconnect, &am);
@@ -149,7 +149,7 @@ impl Cpu {
                     branch_crossed = (old_pc & 0xFF00) != (self.pc & 0xFF00);
                 }
             }
-            Op::Bit => with_value!(|value| self.bit(value)),
+            Op::Bit => with_value!(&mut page_crossed, |value| self.bit(value)),
             Op::Bmi => {
                 let addr = self.addr_for(interconnect, &am);
                 let old_pc = self.pc;
@@ -200,24 +200,24 @@ impl Cpu {
             Op::Cld => self.cld(),
             Op::Cli => self.cli(),
             Op::Clv => self.clv(),
-            Op::Cmp => with_value!(|value| self.cmp(value)),
-            Op::Cpx => with_value!(|value| self.cpx(value)),
-            Op::Cpy => with_value!(|value| self.cpy(value)),
+            Op::Cmp => with_value!(&mut page_crossed, |value| self.cmp(value)),
+            Op::Cpx => with_value!(&mut page_crossed, |value| self.cpx(value)),
+            Op::Cpy => with_value!(&mut page_crossed, |value| self.cpy(value)),
             Op::Dec => with_addr!(|addr| self.dec(interconnect, addr)),
             Op::Dex => self.dex(),
             Op::Dey => self.dey(),
-            Op::Eor => with_value!(|value| self.eor(value)),
+            Op::Eor => with_value!(&mut page_crossed, |value| self.eor(value)),
             Op::Inc => with_addr!(|addr| self.inc(interconnect, addr)),
             Op::Inx => self.inx(),
             Op::Iny => self.iny(),
             Op::Jmp => with_addr!(|addr| self.jmp(addr)),
             Op::Jsr => with_addr!(|addr| self.jsr(interconnect, addr)),
-            Op::Lda => with_value!(|value| self.lda(value)),
-            Op::Ldx => with_value!(|value| self.ldx(value)),
-            Op::Ldy => with_value!(|value| self.ldy(value)),
+            Op::Lda => with_value!(&mut page_crossed, |value| self.lda(value)),
+            Op::Ldx => with_value!(&mut page_crossed, |value| self.ldx(value)),
+            Op::Ldy => with_value!(&mut page_crossed, |value| self.ldy(value)),
             Op::Lsr => self.lsr(interconnect, am),
             Op::Nop => {}
-            Op::Ora => with_value!(|value| self.ora(value)),
+            Op::Ora => with_value!(&mut page_crossed, |value| self.ora(value)),
             Op::Pha => self.pha(interconnect),
             Op::Php => self.php(interconnect),
             Op::Pla => self.pla(interconnect),
@@ -226,7 +226,7 @@ impl Cpu {
             Op::Ror => self.ror(interconnect, am),
             Op::Rti => self.rti(interconnect),
             Op::Rts => self.rts(interconnect),
-            Op::Sbc => with_value!(|value| self.sbc(value)),
+            Op::Sbc => with_value!(&mut page_crossed, |value| self.sbc(value)),
             Op::Sec => self.sec(),
             Op::Sed => self.sed(),
             Op::Sei => self.sei(),
