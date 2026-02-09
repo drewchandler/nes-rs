@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libx11-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxext-dev \
+            libxfixes-dev
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy (deny warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run tests (deny warnings)
+        env:
+          RUSTFLAGS: -D warnings
+          RUSTDOCFLAGS: -D warnings
+        run: cargo test --all-targets

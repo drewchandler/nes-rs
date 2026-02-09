@@ -1,7 +1,7 @@
 use joypad::ButtonState;
+use minifb::{Key, Window, WindowOptions};
 use nes::Nes;
 use rom::Rom;
-use minifb::{Window, WindowOptions, Key};
 
 pub struct Emulator {
     nes: Nes,

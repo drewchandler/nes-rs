@@ -83,6 +83,7 @@ impl Instruction {
         match opcode {
             0x00 => Instruction(Op::Brk, AddressingMode::Implicit),
             0x01 => Instruction(Op::Ora, AddressingMode::IndirectX),
+            0x02 => Instruction(Op::Nop, AddressingMode::Implicit),
             0x05 => Instruction(Op::Ora, AddressingMode::ZeroPage),
             0x06 => Instruction(Op::Asl, AddressingMode::ZeroPage),
             0x08 => Instruction(Op::Php, AddressingMode::Implicit),
@@ -96,6 +97,7 @@ impl Instruction {
             0x16 => Instruction(Op::Asl, AddressingMode::ZeroPageX),
             0x18 => Instruction(Op::Clc, AddressingMode::Implicit),
             0x19 => Instruction(Op::Ora, AddressingMode::AbsoluteY),
+            0x1d => Instruction(Op::Ora, AddressingMode::AbsoluteX),
             0x20 => Instruction(Op::Jsr, AddressingMode::Absolute),
             0x21 => Instruction(Op::And, AddressingMode::IndirectX),
             0x24 => Instruction(Op::Bit, AddressingMode::ZeroPage),

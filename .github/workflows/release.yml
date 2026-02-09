@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Install create-dmg
+        if: runner.os == 'macOS'
+        run: brew install create-dmg
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/NES-RS.app/Contents/MacOS dist/NES-RS.app/Contents/Resources
+          cp target/release/nes-rs dist/NES-RS.app/Contents/MacOS/nes-rs
+          chmod +x dist/NES-RS.app/Contents/MacOS/nes-rs
+
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+
+          cat > dist/NES-RS.app/Contents/Info.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleName</key>
+              <string>NES-RS</string>
+              <key>CFBundleDisplayName</key>
+              <string>NES-RS</string>
+              <key>CFBundleIdentifier</key>
+              <string>com.drewchandler.nes-rs</string>
+              <key>CFBundleVersion</key>
+              <string>${version}</string>
+              <key>CFBundleShortVersionString</key>
+              <string>${version}</string>
+              <key>CFBundleExecutable</key>
+              <string>nes-rs</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleIconFile</key>
+              <string>NES-RS.icns</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.13</string>
+          </dict>
+          </plist>
+          PLIST
+
+          ICONSET="$(mktemp -d)/NES-RS.iconset"
+          mkdir -p "$ICONSET"
+          sips -z 16 16 assets/icon.png --out "$ICONSET/icon_16x16.png"
+          sips -z 32 32 assets/icon.png --out "$ICONSET/icon_16x16@2x.png"
+          sips -z 32 32 assets/icon.png --out "$ICONSET/icon_32x32.png"
+          sips -z 64 64 assets/icon.png --out "$ICONSET/icon_32x32@2x.png"
+          sips -z 128 128 assets/icon.png --out "$ICONSET/icon_128x128.png"
+          sips -z 256 256 assets/icon.png --out "$ICONSET/icon_128x128@2x.png"
+          sips -z 256 256 assets/icon.png --out "$ICONSET/icon_256x256.png"
+          sips -z 512 512 assets/icon.png --out "$ICONSET/icon_256x256@2x.png"
+          sips -z 512 512 assets/icon.png --out "$ICONSET/icon_512x512.png"
+          sips -z 1024 1024 assets/icon.png --out "$ICONSET/icon_512x512@2x.png"
+          iconutil -c icns "$ICONSET" -o dist/NES-RS.app/Contents/Resources/NES-RS.icns
+
+          sips -z 427 640 assets/dmg-background.png --out dist/dmg-background.png
+
+          create-dmg \
+            --volname "NES-RS" \
+            --volicon "dist/NES-RS.app/Contents/Resources/NES-RS.icns" \
+            --background "dist/dmg-background.png" \
+            --window-size 640 427 \
+            --icon-size 128 \
+            --icon "NES-RS.app" 180 240 \
+            --app-drop-link 460 240 \
+            "dist/nes-rs-${tag}-macos.dmg" \
+            "dist"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $tag = $env:GITHUB_REF_NAME
+          $zipPath = "dist/nes-rs-$tag-windows-x64.zip"
+          Compress-Archive -Path "target/release/nes-rs.exe" -DestinationPath $zipPath
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nes-rs-${{ runner.os }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+          generate_release_notes: true
