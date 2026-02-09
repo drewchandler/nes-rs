@@ -45,6 +45,16 @@ pub struct Ppu {
     status: u8,
     spr_ram_addr: u8,
     fine_x: u8,
+    fv: u16,
+    v: u16,
+    h: u16,
+    vt: u16,
+    ht: u16,
+    temp_fv: u16,
+    temp_v: u16,
+    temp_h: u16,
+    temp_vt: u16,
+    temp_ht: u16,
     scroll_x: u16,
     scroll_y: u16,
     vram_addr: u16,
@@ -89,6 +99,16 @@ impl Ppu {
             status: 0,
             spr_ram_addr: 0,
             fine_x: 0,
+            fv: 0,
+            v: 0,
+            h: 0,
+            vt: 0,
+            ht: 0,
+            temp_fv: 0,
+            temp_v: 0,
+            temp_h: 0,
+            temp_vt: 0,
+            temp_ht: 0,
             scroll_x: 0,
             scroll_y: 0,
             vram_addr: 0,
@@ -140,7 +160,9 @@ impl Ppu {
         let prev_nmi = self.nmi_flag();
         self.ctrl = value;
         self.open_bus = value;
-        self.tmp_vram_addr = self.tmp_vram_addr & 0xf3ff | ((value as u16) & 0x03) << 10;
+        self.temp_h = ((value >> 0) & 0x01) as u16;
+        self.temp_v = ((value >> 1) & 0x01) as u16;
+        self.update_tmp_vram_addr();
         self.sync_scroll_from_tmp();
         if !prev_nmi && self.nmi_flag() && self.status & STATUS_VBLANK_FLAG != 0 {
             self.nmi_queued = true;
@@ -171,26 +193,33 @@ impl Ppu {
 
     pub fn write_scroll(&mut self, value: u8) {
         if self.write_flag {
-            self.tmp_vram_addr = (self.tmp_vram_addr & 0x0c1f)
-                | ((value as u16) & 0x07) << 12
-                | ((value as u16) & 0x38) << 2
-                | ((value as u16) & 0xc0) << 2;
+            self.temp_vt = (value as u16 >> 3) & 0x1f;
+            self.temp_fv = (value as u16) & 0x07;
         } else {
             self.fine_x = value & 0x07;
-            self.tmp_vram_addr = (self.tmp_vram_addr & 0xffe0) | (value as u16) >> 3;
+            self.temp_ht = (value as u16 >> 3) & 0x1f;
         }
 
         self.write_flag = !self.write_flag;
+        self.update_tmp_vram_addr();
         self.sync_scroll_from_tmp();
         self.open_bus = value;
     }
 
     pub fn write_vram_addr(&mut self, value: u8) {
         if self.write_flag {
-            self.tmp_vram_addr = self.tmp_vram_addr & 0xff00 | value as u16;
-            self.vram_addr = self.tmp_vram_addr & 0x3fff;
+            self.tmp_vram_addr = (self.tmp_vram_addr & 0xff00) | value as u16;
+            self.temp_vt = (value as u16 >> 5) & 0x07 | (self.temp_vt & 0x18);
+            self.temp_ht = (value as u16) & 0x1f;
+            self.update_tmp_vram_addr();
+            self.install_latches();
         } else {
             self.tmp_vram_addr = (self.tmp_vram_addr & 0x00FF) | ((value as u16) & 0x3F) << 8;
+            self.temp_vt = (self.temp_vt & 0x07) | (((value as u16) & 0x03) << 3);
+            self.temp_h = ((value >> 2) & 0x01) as u16;
+            self.temp_v = ((value >> 3) & 0x01) as u16;
+            self.temp_fv = ((value >> 4) & 0x03) as u16;
+            self.update_tmp_vram_addr();
         }
 
         self.write_flag = !self.write_flag;
@@ -199,14 +228,14 @@ impl Ppu {
     }
 
     pub fn write_vram_data(&mut self, value: u8) {
-        let addr = self.vram_addr;
+        let addr = self.current_vram_addr();
         self.vram.write(addr, value);
         self.increment_2007();
         self.open_bus = value;
     }
 
     pub fn read_vram_data(&mut self) -> u8 {
-        let addr = self.vram_addr % 0x4000;
+        let addr = self.current_vram_addr() % 0x4000;
         let value = if addr >= 0x3f00 {
             self.buffered_read = self.vram.read(addr - 0x1000);
             self.vram.read(addr)
@@ -230,30 +259,24 @@ impl Ppu {
         }
 
         let by32 = self.ctrl & CTRL_INCR_FLAG != 0;
-        let mut fv = (self.vram_addr >> 12) & 0x7;
-        let mut v = (self.vram_addr >> 11) & 0x1;
-        let mut h = (self.vram_addr >> 10) & 0x1;
-        let mut vt = (self.vram_addr >> 5) & 0x1f;
-        let mut ht = self.vram_addr & 0x1f;
-
         if by32 {
-            vt += 1;
+            self.vt += 1;
         } else {
-            ht += 1;
+            self.ht += 1;
         }
 
-        vt += (ht >> 5) & 1;
-        h += (vt >> 5) & 1;
-        v += (h >> 1) & 1;
-        fv += (v >> 1) & 1;
+        self.vt += (self.ht >> 5) & 1;
+        self.h += (self.vt >> 5) & 1;
+        self.v += (self.h >> 1) & 1;
+        self.fv += (self.v >> 1) & 1;
 
-        ht &= 0x1f;
-        vt &= 0x1f;
-        h &= 1;
-        v &= 1;
-        fv &= 7;
+        self.ht &= 0x1f;
+        self.vt &= 0x1f;
+        self.h &= 1;
+        self.v &= 1;
+        self.fv &= 7;
 
-        self.vram_addr = (fv << 12) | (v << 11) | (h << 10) | (vt << 5) | ht;
+        self.update_vram_addr();
     }
 
     pub fn step(&mut self) -> CycleResult {
@@ -318,11 +341,11 @@ impl Ppu {
     }
 
     fn copy_horizontal(&mut self) {
-        self.vram_addr = (self.vram_addr & 0xFBE0) | (self.tmp_vram_addr & 0x041F);
+        self.install_h_latches();
     }
 
     fn copy_vertical(&mut self) {
-        self.vram_addr = (self.vram_addr & 0x841F) | (self.tmp_vram_addr & 0x7BE0);
+        self.install_v_latches();
     }
 
     fn render_pixel(&mut self) {
@@ -410,14 +433,69 @@ impl Ppu {
     }
 
     fn sync_scroll_from_tmp(&mut self) {
-        let coarse_x = (self.tmp_vram_addr & 0x1f) as u16;
-        let coarse_y = ((self.tmp_vram_addr >> 5) & 0x1f) as u16;
-        let nametable_x = ((self.tmp_vram_addr >> 10) & 0x1) as u16;
-        let nametable_y = ((self.tmp_vram_addr >> 11) & 0x1) as u16;
-        let fine_y = ((self.tmp_vram_addr >> 12) & 0x7) as u16;
+        self.scroll_x = self.temp_ht * 8 + self.fine_x as u16 + self.temp_h * 256;
+        self.scroll_y = self.temp_vt * 8 + self.temp_fv + self.temp_v * 240;
+    }
 
-        self.scroll_x = coarse_x * 8 + self.fine_x as u16 + nametable_x * 256;
-        self.scroll_y = coarse_y * 8 + fine_y + nametable_y * 240;
+    fn update_vram_addr(&mut self) {
+        self.vram_addr =
+            (self.fv << 12) | (self.v << 11) | (self.h << 10) | (self.vt << 5) | self.ht;
+    }
+
+    fn update_tmp_vram_addr(&mut self) {
+        self.tmp_vram_addr = (self.temp_fv << 12)
+            | (self.temp_v << 11)
+            | (self.temp_h << 10)
+            | (self.temp_vt << 5)
+            | self.temp_ht;
+    }
+
+    fn current_vram_addr(&self) -> u16 {
+        (self.fv << 12) | (self.v << 11) | (self.h << 10) | (self.vt << 5) | self.ht
+    }
+
+    fn install_latches(&mut self) {
+        self.fv = self.temp_fv;
+        self.v = self.temp_v;
+        self.h = self.temp_h;
+        self.vt = self.temp_vt;
+        self.ht = self.temp_ht;
+        self.update_vram_addr();
+    }
+
+    fn install_h_latches(&mut self) {
+        self.h = self.temp_h;
+        self.ht = self.temp_ht;
+        self.update_vram_addr();
+    }
+
+    fn install_v_latches(&mut self) {
+        self.fv = self.temp_fv;
+        self.v = self.temp_v;
+        self.vt = self.temp_vt;
+        self.update_vram_addr();
+    }
+
+    fn increment_hsc(&mut self) {
+        self.ht += 1;
+        self.h += self.ht >> 5;
+        self.ht &= 31;
+        self.h &= 1;
+        self.update_vram_addr();
+    }
+
+    fn increment_vs(&mut self) {
+        self.fv += 1;
+        let fv_overflow = self.fv >> 3;
+        self.vt += fv_overflow;
+        self.vt &= 31;
+        if self.vt == 30 && fv_overflow == 1 {
+            self.v += 1;
+            self.vt = 0;
+        }
+        self.fv &= 7;
+        self.v &= 1;
+        self.update_vram_addr();
     }
 
     fn shift_background_shifters(&mut self) {
@@ -554,30 +632,33 @@ impl Ppu {
     }
 
     fn fetch_name_table_byte(&mut self) {
-        let addr = 0x2000 | self.vram_addr & 0x0fff;
+        let addr = 0x2000
+            | ((self.v as u16) << 11)
+            | ((self.h as u16) << 10)
+            | ((self.vt as u16) << 5)
+            | (self.ht as u16);
         self.next_tile_id = self.vram.read(addr);
     }
 
     fn fetch_attribute_table_byte(&mut self) {
         let addr = 0x23C0
-            | (self.vram_addr & 0x0C00)
-            | ((self.vram_addr >> 4) & 0x38)
-            | ((self.vram_addr >> 2) & 0x07);
-        let shift = ((self.vram_addr >> 4) & 0x04) | (self.vram_addr & 0x02);
+            | ((self.v as u16) << 11)
+            | ((self.h as u16) << 10)
+            | (((self.vt as u16) & 0x1C) << 1)
+            | (((self.ht as u16) & 0x1C) >> 2);
+        let shift = (((self.vt as u16) & 0x02) << 1) | ((self.ht as u16) & 0x02);
         self.next_tile_attr = (self.vram.read(addr) >> shift) & 0x03;
     }
 
     fn fetch_low_bg_tile_byte(&mut self) {
-        let fine_y = (self.vram_addr >> 12) & 0x07;
         let tile = self.next_tile_id as u16;
-        let addr = self.background_pattern_table() + tile * 16 + fine_y;
+        let addr = self.background_pattern_table() + tile * 16 + self.fv;
         self.next_tile_lsb = self.vram.read(addr);
     }
 
     fn fetch_high_bg_tile_byte(&mut self) {
-        let fine_y = (self.vram_addr >> 12) & 0x07;
         let tile = self.next_tile_id as u16;
-        let addr = self.background_pattern_table() + tile * 16 + fine_y + 8;
+        let addr = self.background_pattern_table() + tile * 16 + self.fv + 8;
         self.next_tile_msb = self.vram.read(addr);
     }
 
@@ -601,29 +682,11 @@ impl Ppu {
     }
 
     fn increment_x(&mut self) {
-        if (self.vram_addr & 0x001F) == 31 {
-            self.vram_addr = self.vram_addr & !0x001F ^ 0x0400;
-        } else {
-            self.vram_addr += 1;
-        }
+        self.increment_hsc();
     }
 
     fn increment_y(&mut self) {
-        if (self.vram_addr & 0x7000) != 0x7000 {
-            self.vram_addr += 0x1000;
-        } else {
-            self.vram_addr &= !0x7000;
-            let mut y = (self.vram_addr & 0x03E0) >> 5;
-            if y == 29 {
-                y = 0;
-                self.vram_addr ^= 0x0800;
-            } else if y == 31 {
-                y = 0;
-            } else {
-                y += 1;
-            }
-            self.vram_addr = (self.vram_addr & !0x03E0) | (y << 5);
-        }
+        self.increment_vs();
     }
 
     fn tick(&mut self) -> bool {
