@@ -1,6 +1,8 @@
 mod vram;
+mod sprites;
 
 use self::vram::Vram;
+use self::sprites::SpritePipeline;
 use rom::Mirroring;
 
 pub const CTRL_INCR_FLAG: u8 = 0x04;
@@ -9,6 +11,8 @@ const CTRL_NMI_FLAG: u8 = 0x80;
 const MASK_DISPLAY_BACKGROUND: u8 = 0x08;
 const MASK_DISPLAY_SPRITES: u8 = 0x10;
 const STATUS_VBLANK_FLAG: u8 = 0x80;
+const STATUS_SPRITE_ZERO_HIT: u8 = 0x40;
+const STATUS_SPRITE_OVERFLOW: u8 = 0x20;
 const PIXELS: usize = 256 * 240;
 
 static SYSTEM_PALETTE: [u32; 64] =
@@ -46,6 +50,7 @@ pub struct Ppu {
     write_flag: bool,
     vram: Vram,
     spr_ram: [u8; 256],
+    sprites: SpritePipeline,
     pub screen: [u32; PIXELS],
     name_table_byte: u8,
     attribute_table_byte: u8,
@@ -78,6 +83,7 @@ impl Ppu {
             write_flag: false,
             vram: Vram::with_mirroring(mirroring),
             spr_ram: [0; 256],
+            sprites: SpritePipeline::new(),
             screen: [0; PIXELS],
             name_table_byte: 0,
             attribute_table_byte: 0,
@@ -148,7 +154,7 @@ impl Ppu {
     }
 
     pub fn read_spr_ram_data(&self) -> u8 {
-        self.spr_ram[self.spr_ram_addr as usize]
+        self.primary_oam_byte(self.spr_ram_addr as usize)
     }
 
     pub fn write_spr_ram_data(&mut self, value: u8) {
@@ -216,12 +222,14 @@ impl Ppu {
     }
 
     pub fn step(&mut self) -> CycleResult {
+        self.finish_sprite_pixel();
         if self.scanline >= 0 && self.scanline < 240 {
             // Forced blanking still outputs a color; fetch/scroll enable and
             // visible background composition are separate decisions.
             self.process_render_scanline();
         }
         if self.rendering_enabled() && self.render_scanline() {
+            self.step_sprites();
             self.process_fetch_scanline();
             if self.cycle == 256 {
                 self.increment_y();
@@ -236,6 +244,7 @@ impl Ppu {
 
         if (self.scanline == -1 || self.scanline == 261) && self.cycle == 1 {
             self.set_vblank(false);
+            self.status &= !(STATUS_SPRITE_ZERO_HIT | STATUS_SPRITE_OVERFLOW);
         } else if self.scanline == 241 && self.cycle == 1 {
             self.set_vblank(true);
         }
@@ -279,7 +288,15 @@ impl Ppu {
         if self.cycle < 1 || self.cycle > 256 {
             return;
         }
-        let pixel = self.background_pixel();
+        let mut pixel = self.background_pixel();
+        if let Some(sprite) = self.sprite_pixel() {
+            if sprite.zero && pixel & 3 != 0 && self.cycle < 256 {
+                self.queue_sprite_zero_hit();
+            }
+            if pixel & 3 == 0 || !sprite.behind_background {
+                pixel = sprite.palette;
+            }
+        }
         let addr = if !self.rendering_enabled() && self.vram_addr & 0x3f00 == 0x3f00 {
             // With rendering disabled, an address in palette space overrides
             // the usual universal backdrop color.
