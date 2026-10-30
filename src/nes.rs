@@ -31,7 +31,7 @@ impl Nes {
                 let result = self.interconnect.ppu.step();
 
                 if result.nmi {
-                    self.cpu.nmi(&mut self.interconnect);
+                    self.cpu.nmi();
                 }
 
                 if result.end_frame {

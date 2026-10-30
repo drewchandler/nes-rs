@@ -103,6 +103,10 @@ impl Ppu {
         self.spr_ram_addr = value;
     }
 
+    pub fn read_spr_ram_data(&self) -> u8 {
+        self.spr_ram[self.spr_ram_addr as usize]
+    }
+
     pub fn write_spr_ram_data(&mut self, value: u8) {
         self.spr_ram[self.spr_ram_addr as usize] = value;
         self.spr_ram_addr = self.spr_ram_addr.overflowing_add(1).0;
