@@ -14,6 +14,8 @@ pub trait Interconnect {
 pub struct MemoryMappingInterconnect {
     mapper: Box<Mapper>,
     ram: [u8; 2048],
+    open_bus: u8,
+    ppu_io_latch: u8,
     pub ppu: Ppu,
     pub joypad1: Joypad,
 }
@@ -52,6 +54,7 @@ enum MappedAddress {
     Joypad1,
     Joypad2,
     PrgRom,
+    OpenBus,
 }
 
 fn map_addr(addr: u16) -> MappedAddress {
@@ -94,7 +97,7 @@ fn map_addr(addr: u16) -> MappedAddress {
         0x4015 => MappedAddress::PapuSoundVerticalClockSignalRegister,
         0x4016 => MappedAddress::Joypad1,
         0x4017 => MappedAddress::Joypad2,
-        _ => panic!("Unmappable address: {:x}", addr),
+        _ => MappedAddress::OpenBus,
     }
 }
 
@@ -108,6 +111,8 @@ impl MemoryMappingInterconnect {
         MemoryMappingInterconnect {
             mapper: Box::new(mapper),
             ram: [0; 2048],
+            open_bus: 0,
+            ppu_io_latch: 0,
             ppu: Ppu::new(),
             joypad1: Joypad::new(),
         }
@@ -116,22 +121,46 @@ impl MemoryMappingInterconnect {
 
 impl Interconnect for MemoryMappingInterconnect {
     fn read_double(&mut self, addr: u16) -> u16 {
-        ((self.read_word(addr + 1) as u16) << 8) + self.read_word(addr) as u16
+        let low = self.read_word(addr) as u16;
+        low | ((self.read_word(addr.wrapping_add(1)) as u16) << 8)
     }
 
     fn read_word(&mut self, addr: u16) -> u8 {
-        match map_addr(addr) {
+        let value = match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.read(addr),
-            MappedAddress::PpuStatusRegister => self.ppu.read_status(),
-            MappedAddress::VramIoRegister => self.ppu.read_vram_data(),
+            MappedAddress::PpuStatusRegister => {
+                self.ppu_io_latch = (self.ppu.read_status() & 0xe0) | (self.ppu_io_latch & 0x1f);
+                self.ppu_io_latch
+            }
+            MappedAddress::SprRamIoRegister => {
+                self.ppu_io_latch = self.ppu.read_spr_ram_data();
+                self.ppu_io_latch
+            }
+            MappedAddress::VramIoRegister => {
+                self.ppu_io_latch = self.ppu.read_vram_data();
+                self.ppu_io_latch
+            }
+            MappedAddress::PpuControlRegister |
+            MappedAddress::PpuMaskRegister |
+            MappedAddress::SprRamAddressRegister |
+            MappedAddress::PpuScrollRegister |
+            MappedAddress::VramAddressRegister => self.ppu_io_latch,
             MappedAddress::Joypad1 => self.joypad1.read(),
             MappedAddress::Joypad2 => 0,
-            _ => panic!("Reading from unimplemented memory address: {:x}", addr),
-        }
+            // Unimplemented APU/expansion reads leave the CPU data bus driven
+            // by its previous value. In particular, dummy reads must not panic.
+            _ => self.open_bus,
+        };
+        self.open_bus = value;
+        value
     }
 
     fn write_word(&mut self, addr: u16, value: u8) {
+        self.open_bus = value;
+        if addr >= 0x2000 && addr < 0x4000 {
+            self.ppu_io_latch = value;
+        }
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr] = value,
             MappedAddress::PrgRom => self.mapper.write(addr, value),
@@ -143,6 +172,8 @@ impl Interconnect for MemoryMappingInterconnect {
             MappedAddress::Joypad1 => self.joypad1.strobe(),
             MappedAddress::VramAddressRegister => self.ppu.write_vram_addr(value),
             MappedAddress::VramIoRegister => self.ppu.write_vram_data(value),
+            // The CPU schedules the actual DMA transfer at its next read.
+            MappedAddress::SpriteDmaRegister | MappedAddress::OpenBus => {},
             _ => {
                 println!("WARNING: Writing to unimplemented memory address: {:x}",
                          addr)
