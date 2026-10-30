@@ -2,21 +2,38 @@ use std::io::{self, Read};
 use std::path;
 use std::fs;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Mirroring {
+    Horizontal,
+    Vertical,
+    FourScreen,
+}
+
 pub struct Rom {
     pub prg_rom: Vec<Vec<u8>>,
     pub chr_rom: Vec<Vec<u8>>,
     pub mapper: u8,
+    pub mirroring: Mirroring,
 }
 
 impl Rom {
     pub fn load<P: AsRef<path::Path>>(filename: P) -> io::Result<Rom> {
         let mut file = fs::File::open(filename)?;
 
+        Rom::read(&mut file)
+    }
+
+    fn read<R: Read>(file: &mut R) -> io::Result<Rom> {
         let mut header = [0u8; 16];
         file.read_exact(&mut header)?;
 
         if header[0..4] != *b"NES\x1a" {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid ROM"));
+        }
+
+        if header[6] & 0x04 != 0 {
+            let mut trainer = [0u8; 512];
+            file.read_exact(&mut trainer)?;
         }
 
         let prg_rom = (0..header[4]).map(|_| {
@@ -37,6 +54,66 @@ impl Rom {
             prg_rom: prg_rom,
             chr_rom: chr_rom,
             mapper: (header[7] & 0xf0) + (header[6] >> 4),
+            mirroring: if header[6] & 0x08 != 0 {
+                Mirroring::FourScreen
+            } else if header[6] & 0x01 != 0 {
+                Mirroring::Vertical
+            } else {
+                Mirroring::Horizontal
+            },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn ines_mirroring_flags_reach_the_mapped_ppu() {
+        use interconnect::{Interconnect, MemoryMappingInterconnect};
+        for &(flags, mirroring) in &[(0x20, Mirroring::Horizontal), (0x21, Mirroring::Vertical),
+                                     (0x28, Mirroring::FourScreen), (0x29, Mirroring::FourScreen)] {
+            let mut bytes = vec![0; 16 + 16384];
+            bytes[..4].copy_from_slice(b"NES\x1a");
+            bytes[4] = 1;
+            bytes[6] = flags;
+            let rom = Rom::read(&mut Cursor::new(bytes)).unwrap();
+            assert_eq!(rom.mirroring, mirroring);
+            assert_eq!(rom.mapper, 2);
+            let mut bus = MemoryMappingInterconnect::new(rom);
+            // Write a nametable byte through CPU ports, then read each logical
+            // table through PPUDATA's real delayed-read interface.
+            bus.write_word(0x2006, 0x20);
+            bus.write_word(0x2006, 0);
+            bus.write_word(0x2007, 0xab);
+            for high in &[0x20, 0x24, 0x28, 0x2c] {
+                bus.write_word(0x2006, *high);
+                bus.write_word(0x2006, 0);
+                bus.read_word(0x2007);
+                let actual = bus.read_word(0x2007);
+                let aliases_zero = *high == 0x20 ||
+                    (mirroring == Mirroring::Horizontal && *high == 0x24) ||
+                    (mirroring == Mirroring::Vertical && *high == 0x28);
+                assert_eq!(actual, if aliases_zero { 0xab } else { 0 });
+            }
+        }
+    }
+
+    #[test]
+    fn trainer_is_skipped_before_reading_prg_and_chr_banks() {
+        let mut bytes = vec![0; 16 + 512 + 16384 + 8192];
+        bytes[..4].copy_from_slice(b"NES\x1a");
+        bytes[4] = 1;
+        bytes[5] = 1;
+        bytes[6] = 0x25;
+        bytes[16] = 0x11;
+        bytes[16 + 512] = 0xab;
+        bytes[16 + 512 + 16384] = 0xcd;
+        let rom = Rom::read(&mut Cursor::new(bytes)).unwrap();
+        assert_eq!(rom.mirroring, Mirroring::Vertical);
+        assert_eq!(rom.prg_rom[0][0], 0xab);
+        assert_eq!(rom.chr_rom[0][0], 0xcd);
     }
 }

@@ -1,8 +1,9 @@
 mod vram;
 
 use self::vram::Vram;
+use rom::Mirroring;
 
-pub const CTRL_INCR_FLAG: u8 = 0x02;
+pub const CTRL_INCR_FLAG: u8 = 0x04;
 const CTRL_BACKGROUND_FLAG: u8 = 0x10;
 const CTRL_NMI_FLAG: u8 = 0x80;
 const MASK_DISPLAY_BACKGROUND: u8 = 0x08;
@@ -54,10 +55,18 @@ pub struct Ppu {
     buffered_read: u8,
     cycle: u16,
     scanline: i16,
+    odd_frame: bool,
+    nmi_output: bool,
+    nmi_pending: bool,
+    io_latch: u8,
 }
 
 impl Ppu {
     pub fn new() -> Ppu {
+        Ppu::with_mirroring(Mirroring::Horizontal)
+    }
+
+    pub fn with_mirroring(mirroring: Mirroring) -> Ppu {
         Ppu {
             ctrl: 0,
             mask: 0,
@@ -67,7 +76,7 @@ impl Ppu {
             vram_addr: 0,
             tmp_vram_addr: 0,
             write_flag: false,
-            vram: Vram::new(),
+            vram: Vram::with_mirroring(mirroring),
             spr_ram: [0; 256],
             screen: [0; PIXELS],
             name_table_byte: 0,
@@ -78,6 +87,40 @@ impl Ppu {
             buffered_read: 0,
             cycle: 0,
             scanline: -1,
+            odd_frame: false,
+            nmi_output: false,
+            nmi_pending: false,
+            io_latch: 0,
+        }
+    }
+
+    // CPU port accesses share a PPU I/O latch, independent of CPU open bus.
+    pub fn read_register(&mut self, register: u16) -> u8 {
+        self.io_latch = match register & 7 {
+            2 => (self.read_status() & 0xe0) | (self.io_latch & 0x1f),
+            4 => self.read_spr_ram_data(),
+            7 => {
+                let palette = (self.vram_addr & 0x3fff) >= 0x3f00;
+                let value = self.read_vram_data();
+                if palette { value | (self.io_latch & 0xc0) } else { value }
+            }
+            _ => self.io_latch,
+        };
+        self.io_latch
+    }
+
+    pub fn write_register(&mut self, register: u16, value: u8) {
+        // Even a write to read-only PPUSTATUS charges the I/O latch.
+        self.io_latch = value;
+        match register & 7 {
+            0 => self.write_ctrl(value),
+            1 => self.write_mask(value),
+            3 => self.write_spr_ram_addr(value),
+            4 => self.write_spr_ram_data(value),
+            5 => self.write_scroll(value),
+            6 => self.write_vram_addr(value),
+            7 => self.write_vram_data(value),
+            _ => {}
         }
     }
 
@@ -92,6 +135,7 @@ impl Ppu {
 
     pub fn write_ctrl(&mut self, value: u8) {
         self.ctrl = value;
+        self.update_nmi();
         self.tmp_vram_addr = self.tmp_vram_addr & 0xf3ff | ((value as u16) & 0x03) << 10;
     }
 
@@ -130,7 +174,7 @@ impl Ppu {
             self.tmp_vram_addr = self.tmp_vram_addr & 0xff00 | value as u16;
             self.vram_addr = self.tmp_vram_addr;
         } else {
-            self.tmp_vram_addr = (self.tmp_vram_addr & 0x80FF) | ((value as u16) & 0x3F) << 8;
+            self.tmp_vram_addr = (self.tmp_vram_addr & 0x00ff) | ((value as u16) & 0x3F) << 8;
         }
 
         self.write_flag = !self.write_flag;
@@ -143,54 +187,60 @@ impl Ppu {
     }
 
     pub fn read_vram_data(&mut self) -> u8 {
-        let value = self.buffered_read;
-
-        let addr = self.vram_addr;
-        self.buffered_read = self.vram.read(addr);
-
+        let addr = self.vram_addr & 0x3fff;
+        let value = if addr >= 0x3f00 {
+            // Palette reads bypass the buffer, but still refill it from the
+            // nametable address hidden underneath palette RAM.
+            self.buffered_read = self.vram.read(addr - 0x1000);
+            self.vram.read(addr) & self.palette_mask()
+        } else {
+            let previous = self.buffered_read;
+            self.buffered_read = self.vram.read(addr);
+            previous
+        };
         self.incr_vram_addr();
-
         value
     }
 
+    fn render_scanline(&self) -> bool {
+        self.scanline == -1 || self.scanline == 261 || (self.scanline >= 0 && self.scanline < 240)
+    }
+
     fn incr_vram_addr(&mut self) {
-        let incr = self.addr_increment();
-        self.vram_addr += incr;
+        if self.rendering_enabled() && self.render_scanline() {
+            self.increment_x();
+            self.increment_y();
+        } else {
+            self.vram_addr = self.vram_addr.wrapping_add(self.addr_increment()) & 0x7fff;
+        }
     }
 
     pub fn step(&mut self) -> CycleResult {
-        let mut nmi = false;
-
-        if self.rendering_enabled() {
-            match self.scanline {
-                0...239 => {
-                    self.process_render_scanline();
-                    self.process_fetch_scanline();
-
-                    if self.cycle == 257 {
-                        self.vram_addr = (self.vram_addr & 0xFBE0) | (self.tmp_vram_addr & 0x041F);
-                    }
-                }
-                -1 | 261 => {
-                    self.process_fetch_scanline();
-
-                    if self.cycle >= 280 && self.cycle <= 304 {
-                        self.vram_addr = (self.vram_addr & 0x841F) | (self.tmp_vram_addr & 0x7BE0);
-                    }
-                }
-                _ => {}
+        if self.scanline >= 0 && self.scanline < 240 {
+            // Forced blanking still outputs a color; fetch/scroll enable and
+            // visible background composition are separate decisions.
+            self.process_render_scanline();
+        }
+        if self.rendering_enabled() && self.render_scanline() {
+            self.process_fetch_scanline();
+            if self.cycle == 256 {
+                self.increment_y();
+            }
+            if self.cycle == 257 {
+                self.vram_addr = (self.vram_addr & !0x041f) | (self.tmp_vram_addr & 0x041f);
+            }
+            if (self.scanline == -1 || self.scanline == 261) && self.cycle >= 280 && self.cycle <= 304 {
+                self.vram_addr = (self.vram_addr & !0x7be0) | (self.tmp_vram_addr & 0x7be0);
             }
         }
 
-        if self.scanline == 261 && self.cycle == 1 {
+        if (self.scanline == -1 || self.scanline == 261) && self.cycle == 1 {
             self.set_vblank(false);
         } else if self.scanline == 241 && self.cycle == 1 {
             self.set_vblank(true);
-            if self.nmi_flag() {
-                nmi = true;
-            }
         }
 
+        let nmi = ::std::mem::replace(&mut self.nmi_pending, false);
         let end_frame = self.tick();
         CycleResult::new(end_frame, nmi)
     }
@@ -199,22 +249,53 @@ impl Ppu {
         self.display_background() || self.display_sprites()
     }
 
+    fn background_pixel(&self) -> u8 {
+        if !self.display_background() || (self.cycle <= 8 && self.mask & 0x02 == 0) {
+            return 0;
+        }
+        let shift = 32 + (7 - self.scroll) * 4;
+        ((self.tile_data >> shift) & 0x0f) as u8
+    }
+
+    fn palette_mask(&self) -> u8 {
+        if self.mask & 1 != 0 { 0x30 } else { 0x3f }
+    }
+
+    fn palette_color(&self, index: u8) -> u32 {
+        let rgb = SYSTEM_PALETTE[(index & self.palette_mask()) as usize];
+        let emphasis = self.mask >> 5;
+        let mut r = (rgb >> 16) & 0xff;
+        let mut g = (rgb >> 8) & 0xff;
+        let mut b = rgb & 0xff;
+        // RGB approximation for NTSC emphasis: attenuate the other channels
+        // by 25%. This static palette is not an analog composite-video model.
+        if emphasis & 0x06 != 0 { r = r * 3 / 4; }
+        if emphasis & 0x05 != 0 { g = g * 3 / 4; }
+        if emphasis & 0x03 != 0 { b = b * 3 / 4; }
+        (r << 16) | (g << 8) | b
+    }
+
     fn process_render_scanline(&mut self) {
         if self.cycle < 1 || self.cycle > 256 {
             return;
         }
-
-        let shift = 32 + (7 - self.scroll) * 4;
-        let bg_color_addr = (0x3f00 | self.tile_data >> shift) as u16;
-        let bg_palette_index = self.vram.read(bg_color_addr);
-        let color = SYSTEM_PALETTE[(bg_palette_index % 64) as usize];
-        self.screen[256 * self.scanline as usize + self.cycle as usize - 1] = color;
+        let pixel = self.background_pixel();
+        let addr = if !self.rendering_enabled() && self.vram_addr & 0x3f00 == 0x3f00 {
+            // With rendering disabled, an address in palette space overrides
+            // the usual universal backdrop color.
+            self.vram_addr & 0x3fff
+        } else if pixel & 3 == 0 {
+            0x3f00
+        } else {
+            0x3f00 | pixel as u16
+        };
+        self.screen[256 * self.scanline as usize + self.cycle as usize - 1] =
+            self.palette_color(self.vram.read(addr));
     }
 
     fn process_fetch_scanline(&mut self) {
         match self.cycle {
             1...256 | 321...336 => self.fetch_bg_data(),
-            257 => self.increment_y(),
             320 => {}
             _ => {}
         }
@@ -307,6 +388,13 @@ impl Ppu {
     fn tick(&mut self) -> bool {
         let mut end_frame = false;
 
+        // Odd rendered NTSC frames omit the last pre-render dot.
+        if self.scanline == 261 && self.cycle == 339 && self.odd_frame && self.rendering_enabled() {
+            self.cycle = 0;
+            self.scanline = 0;
+            self.odd_frame = false;
+            return true;
+        }
         self.cycle += 1;
 
         if self.cycle > 340 {
@@ -315,6 +403,7 @@ impl Ppu {
 
             if self.scanline > 261 {
                 self.scanline = 0;
+                self.odd_frame = !self.odd_frame;
                 end_frame = true;
             }
         }
@@ -350,12 +439,21 @@ impl Ppu {
         self.mask & MASK_DISPLAY_SPRITES != 0
     }
 
+    fn update_nmi(&mut self) {
+        let output = self.status & STATUS_VBLANK_FLAG != 0 && self.nmi_flag();
+        if output && !self.nmi_output {
+            self.nmi_pending = true;
+        }
+        self.nmi_output = output;
+    }
+
     fn set_vblank(&mut self, value: bool) {
         self.status = if value {
             self.status | STATUS_VBLANK_FLAG
         } else {
             self.status & !STATUS_VBLANK_FLAG
         };
+        self.update_nmi();
     }
 }
 
@@ -425,3 +523,6 @@ mod tests {
         assert_eq!(ppu.spr_ram[0x09 as usize], 0xfe);
     }
 }
+
+#[cfg(test)]
+mod regression_tests;
