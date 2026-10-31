@@ -17,8 +17,10 @@ index.html directly. The build needs no Node packages or JavaScript binding tool
 All paths are relative, so the site also works under a GitHub Pages repository path.
 
 Choose a local `.nes` ROM to start. ROM bytes stay in the browser and are never
-uploaded. The current emulator supports iNES mapper 2 (UxROM) cartridges with
-CHR RAM and at least two PRG banks; other formats show an error.
+uploaded. The current emulator supports mapper 2 (UxROM) cartridges in legacy
+iNES and NES 2.0 format, with at least two PRG banks and 8 KiB CHR RAM.
+NES 2.0 cartridges must use NTSC-compatible timing, submapper 0, 1, or 2, and
+no PRG RAM or NVRAM; extended ROM sizes and other layouts show an error.
 
 Controls match the desktop app: arrows to move, Z for A, X for B,
 Right Shift for Select, and Enter for Start. The page has pause and mute controls,

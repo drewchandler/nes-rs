@@ -418,7 +418,7 @@ fn mapped_bus(program: &[u8]) -> ::interconnect::MemoryMappingInterconnect {
     prg[0x3ffc] = 0;
     prg[0x3ffd] = 0xc0;
     ::interconnect::MemoryMappingInterconnect::new(::rom::Rom {
-        mapper: 2, prg_rom: vec![prg], chr_rom: vec![],
+        mapper: 2, submapper: 0, prg_rom: vec![prg], chr_rom: vec![],
         mirroring: ::rom::Mirroring::Horizontal,
     })
 }
