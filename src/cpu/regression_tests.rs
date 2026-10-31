@@ -29,15 +29,17 @@ enum Access {
 struct Bus {
     mem: [u8; 65536],
     accesses: Vec<Access>,
+    irq: bool,
 }
 
 impl Bus {
     fn new() -> Bus {
-        Bus { mem: [0; 65536], accesses: Vec::new() }
+        Bus { mem: [0; 65536], accesses: Vec::new(), irq: false }
     }
 }
 
 impl Interconnect for Bus {
+    fn poll_irq(&self) -> bool { self.irq }
     fn read_word(&mut self, addr: u16) -> u8 {
         self.accesses.push(Access::Read(addr));
         self.mem[addr as usize]
@@ -452,4 +454,43 @@ fn dma_and_rmw_dma_work_with_real_mapped_bus() {
     bus.write_word(0, 0xab);
     assert_eq!(bus.read_word(0x6000), 0xab);
     assert_eq!(bus.read_word(0x4014), 0xab);
+}
+
+#[test]
+fn irq_poll_uses_old_i_for_cli_sei_plp_and_restored_i_for_rti() {
+    for &(opcode, old_i, restored_i, expected) in &[
+        (0x58, true, false, false), (0x78, false, true, true),
+        (0x28, true, false, false), (0x28, false, true, true),
+        (0x40, true, false, true), (0x40, false, true, false),
+    ] {
+        let (mut cpu, mut bus) = setup(&[opcode]);
+        cpu.set_interrupt_disable(old_i);
+        bus.mem[0x1fe] = if restored_i { INTERUPT_DISABLE } else { 0 };
+        bus.irq = true;
+        cpu.step(&mut bus);
+        assert_eq!(cpu.pending_irq, expected, "opcode {:02x}", opcode);
+    }
+}
+
+#[test]
+fn irq_is_seven_bus_cycles_preserves_flags_and_nmi_has_priority() {
+    for nmi in [false, true] {
+        let (mut cpu, mut bus) = setup(&[0xea, 0xea]);
+        cpu.p = CARRY_FLAG | DECIMAL_MODE;
+        bus.irq = true;
+        bus.mem[0xfffe] = 0;
+        bus.mem[0xffff] = 0x90;
+        bus.mem[0xfffa] = 0;
+        bus.mem[0xfffb] = 0xa0;
+        assert_eq!(cpu.step(&mut bus), 2);
+        if nmi { cpu.nmi(); }
+        bus.accesses.clear();
+        assert_eq!(cpu.step(&mut bus), 7);
+        assert_eq!(bus.accesses.len(), 7);
+        assert_eq!(cpu.pc, if nmi { 0xa000 } else { 0x9000 });
+        assert_eq!(bus.mem[0x1fd], 0x80);
+        assert_eq!(bus.mem[0x1fc], 1);
+        assert_eq!(bus.mem[0x1fb], CARRY_FLAG | DECIMAL_MODE | UNUSED_FLAG);
+        assert!(cpu.interrupt_disable());
+    }
 }

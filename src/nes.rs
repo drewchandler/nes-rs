@@ -23,21 +23,8 @@ impl Nes {
     pub fn run_frame(&mut self, joypad1_state: ButtonState) -> &[u32; 256 * 240] {
         self.interconnect.joypad1.set_state(joypad1_state);
 
-        let mut frame_in_progress = true;
-        while frame_in_progress {
-            let cycles = self.cpu.step(&mut self.interconnect);
-
-            for _ in 0..cycles * 3 {
-                let result = self.interconnect.ppu.step();
-
-                if result.nmi {
-                    self.cpu.nmi();
-                }
-
-                if result.end_frame {
-                    frame_in_progress = false;
-                }
-            }
+        while !self.interconnect.take_frame_ready() {
+            self.cpu.step(&mut self.interconnect);
         }
 
         &self.interconnect.ppu.screen
