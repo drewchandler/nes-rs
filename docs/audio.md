@@ -96,8 +96,8 @@ NES_TEST_ROMS=/tmp/nes-test-roms cargo test --release --locked \
 ```
 
 All eight `apu_test` singles, eleven `blargg_apu_2005.07.30` tests, and six
-`apu_reset` tests pass. The adapter reproduces fixed NROM PRG/CHR and supplies
-the test shell's SRAM, while executing the application's CPU, APU, DMA, and PPU
+`apu_reset` tests pass. The application's NROM mapper handles PRG/CHR; the test adapter supplies
+the test shell's SRAM while executing the application's CPU, APU, DMA, and PPU
 clock paths. Modern shells require the `$6001..$6003` signature and final
 `$6000` result; reset requests receive a delayed soft reset. Older shells must
 reach their terminal self-jump and report success at `$F0`. The separate old
@@ -120,7 +120,8 @@ speaker in the cloud environment.
 
 ## Limits
 
-The application targets NTSC, mapper 2, and CHR RAM. PAL/Dendy timing, expansion
+The application targets NTSC, NROM (mapper 0) with CHR-ROM or CHR RAM, and
+UxROM (mapper 2) with CHR RAM. PAL/Dendy timing, expansion
 audio, additional mappers, and mapper IRQs require further work. The analog
 output/filter model is an approximation.
 

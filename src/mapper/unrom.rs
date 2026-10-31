@@ -1,21 +1,28 @@
 use rom::Rom;
 use mapper::Mapper;
+use mapper::chr::ChrMemory;
 
 pub struct Unrom {
     rom: Rom,
     active_bank: usize,
+    chr: ChrMemory,
 }
 
 impl Unrom {
     pub fn new(rom: Rom) -> Unrom {
+        assert!(rom.chr_rom.is_empty(), "UxROM requires CHR RAM");
         Unrom {
             rom: rom,
             active_bank: 0,
+            chr: ChrMemory::new(Vec::new()),
         }
     }
 }
 
 impl Mapper for Unrom {
+    fn read_chr(&self, addr: u16) -> u8 { self.chr.read(addr) }
+    fn write_chr(&mut self, addr: u16, value: u8) { self.chr.write(addr, value); }
+
     fn read(&self, addr: u16) -> u8 {
         let prg_rom = &self.rom.prg_rom;
 

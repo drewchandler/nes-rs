@@ -100,18 +100,11 @@ impl Interconnect for TestBus {
 
 fn run_rom(relative: &str, legacy: bool) {
     let root = env::var("NES_TEST_ROMS").expect("Set NES_TEST_ROMS; see docs/audio.md");
-    let mut rom = Rom::load(Path::new(&root).join(relative)).unwrap();
+    let rom = Rom::load(Path::new(&root).join(relative)).unwrap();
     assert_eq!(rom.mapper, 0, "Test adapter requires fixed NROM");
     assert!(rom.prg_rom.len() == 1 || rom.prg_rom.len() == 2);
     assert!(rom.chr_rom.len() <= 1);
-    let chr = ::std::mem::replace(&mut rom.chr_rom, vec![]);
-    rom.mapper = 2;
-    let mut inner = MemoryMappingInterconnect::new(rom);
-    inner.write_word(0x2006, 0);
-    inner.write_word(0x2006, 0);
-    for value in chr.iter().flat_map(|bank| bank.iter()) {
-        inner.write_word(0x2007, *value);
-    }
+    let inner = MemoryMappingInterconnect::new(rom);
     let mut bus = TestBus {
         inner,
         ram: [0; 8192],
