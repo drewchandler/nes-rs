@@ -496,12 +496,7 @@ fn real_cpu_dma_and_ppu_clock_render_a_sprite() {
     let mut cpu = Cpu::new();
     cpu.reset(&mut bus);
     for _ in 0..10000 {
-        let cycles = cpu.step(&mut bus);
-        for _ in 0..cycles * 3 {
-            if bus.ppu.step().nmi {
-                cpu.nmi();
-            }
-        }
+        cpu.step(&mut bus);
         if bus.ppu.screen[20 * 256 + 50] == SYSTEM_PALETTE[0x16] {
             return;
         }

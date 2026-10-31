@@ -34,6 +34,21 @@ impl Interconnect for RomBus {
         self.write_word(addr, value as u8);
         self.write_word(addr.wrapping_add(1), (value >> 8) as u8);
     }
+    fn cpu_read(&mut self, addr: u16) -> u8 {
+        let value = self.inner.cpu_read(addr);
+        if self.reads < 3 {
+            self.addresses[self.reads] = addr;
+            self.values[self.reads] = value;
+        }
+        self.reads += 1;
+        value
+    }
+    fn cpu_write(&mut self, addr: u16, value: u8) { self.inner.cpu_write(addr, value); }
+    fn oam_dma_read(&mut self, addr: u16) -> u8 { self.inner.oam_dma_read(addr) }
+    fn take_stall_cycles(&mut self) -> u16 { self.inner.take_stall_cycles() }
+    fn poll_irq(&self) -> bool { self.inner.poll_irq() }
+    fn take_nmi(&mut self) -> bool { self.inner.take_nmi() }
+    fn reset_cpu(&mut self) { self.inner.reset_cpu(); }
 }
 
 impl RomBus {
@@ -87,12 +102,6 @@ fn run_rom(relative: &str, result_addr: u16) {
         bus.reads = 0;
         let cycles = cpu.step(&mut bus);
         let halted = bus.halted(cycles);
-        for _ in 0..cycles * 3 {
-            let result = bus.inner.ppu.step();
-            if result.nmi {
-                cpu.nmi();
-            }
-        }
         elapsed += cycles as u64;
         if halted {
             let result = bus.inner.read_word(result_addr);

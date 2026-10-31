@@ -74,16 +74,16 @@ on a timeout. Intermediate result bytes are not treated as completed results.
 
 The selected ROMs use fixed NROM. A test-only adapter uses mapper 2's initial
 fixed 16/32 KiB PRG mapping and preloads any fixed CHR data into PPU memory.
-The real CPU, DMA, PPU registers, and instruction-to-PPU clock loop execute the
-tests. This adapter does not add NROM/CHR-ROM support to the application.
-Unimplemented APU writes can emit warnings; audio is not part of these tests.
+The real CPU, DMA, PPU registers, and shared CPU-cycle clock execute the tests.
+This adapter does not add NROM/CHR-ROM support to the application. The APU runs
+alongside the PPU; these tests do not open an audio device.
 
 ## Limits
 
-The application still targets mapper 2 and CHR RAM. The NES loop advances the
-PPU after each CPU instruction rather than interleaving individual CPU bus
-cycles. Passing these sprite timing ROMs is not a claim of universal CPU/PPU
-race or full bus-cycle accuracy.
+The application targets mapper 2 and CHR RAM. CPU bus accesses advance the APU
+once and the PPU three dots, including reset, interrupt, and DMA cycles. Passing
+these sprite timing ROMs is not a claim of universal CPU/PPU race or half-cycle
+bus accuracy. See [audio and shared timing](audio.md) for the clock integration.
 
 Rendering-time OAMDATA bus values, OAM corruption, nonzero-OAMADDR evaluation
 quirks, and OAM writes during rendering are not modeled fully. Evaluation

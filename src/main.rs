@@ -1,5 +1,9 @@
 extern crate minifb;
+extern crate blip_buf;
+extern crate sdl2;
 
+mod apu;
+mod audio;
 mod cpu;
 mod emulator;
 mod interconnect;
