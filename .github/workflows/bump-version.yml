@@ -44,6 +44,8 @@ jobs:
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$DEFAULT_BRANCH")"
+      - name: Test version helpers
+        run: python -m unittest discover -s scripts -p 'test_*.py' -v
       - name: Update package and lockfile versions
         id: version
         env:

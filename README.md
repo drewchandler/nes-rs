@@ -77,6 +77,9 @@ explicitly dispatches the existing Release workflow for that tag. This explicit
 dispatch is needed because pushes made with `GITHUB_TOKEN` do not trigger
 other workflows. No additional personal access token is required.
 
+Version-helper tests run only in **Bump version**, before any files are changed.
+They do not add a job or test step to ordinary pull-request CI.
+
 | Bump | Channel | Example |
 | --- | --- | --- |
 | patch | stable | `0.1.0 → 0.1.1` |
