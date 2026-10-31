@@ -27,4 +27,18 @@ for (let frame = 0; frame < 3; frame++) {
 }
 assert.equal(upload(rom), 0, 'Replace a running cartridge');
 assert.ok(wasm.frame(0) > 0);
-console.log('Wasm cartridge loading, video, audio, input, and replacement passed.');
+// Same NES 2.0 metadata profile as the reported ROM; all program bytes are synthetic.
+rom[7] = 0x08;
+rom[8] = 0x20;
+rom[11] = 7;
+assert.equal(upload(rom), 0, 'Load NES 2.0 UxROM with bus conflicts and 8 KiB CHR RAM');
+assert.ok(wasm.frame(0) > 0);
+rom[8] = 0x21;
+assert.equal(upload(rom), 2, 'Extended mapper 258 must not alias mapper 2');
+rom[8] = 0x20;
+rom[9] = 1;
+assert.equal(upload(rom), 2, 'Reject extended NES 2.0 sizes the parser does not implement');
+rom[9] = 0;
+rom[11] = 8;
+assert.equal(upload(rom), 2, 'Reject unsupported CHR RAM layouts');
+console.log('Wasm cartridge loading, video, audio, input, replacement, and NES 2.0 validation passed.');
