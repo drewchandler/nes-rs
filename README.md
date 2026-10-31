@@ -54,3 +54,15 @@ cargo test --lib
 Native builds retain minifb for the window and bundled SDL2 for audio, and need
 the corresponding platform build tools (including CMake for SDL2). These
 dependencies are excluded from the Wasm target.
+
+## Continuous integration
+
+CI runs on pull requests, pushes to `master`, and manual dispatch. It builds
+and tests the native targets on Linux and independently builds the browser site.
+A Node smoke test loads the compiled Wasm module and checks cartridge validation,
+video, audio, controller input, and replacing a running cartridge using a synthetic
+ROM; no external ROM is required. CI never publishes a release or deploys Pages.
+
+Legacy formatting and compiler warnings are not release blockers in this workflow.
+The current codebase predates modern Rust formatting and lint conventions; those
+can be addressed separately rather than preventing builds and tests from running.
