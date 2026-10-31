@@ -16,5 +16,5 @@ mod mapper;
 mod nes;
 mod ppu;
 pub mod rom;
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(test, target_arch = "wasm32"))]
 mod web;
