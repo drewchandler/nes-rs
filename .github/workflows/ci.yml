@@ -19,7 +19,8 @@ jobs:
     env:
       CC: gcc
       # minifb 0.9 uses XKB functions without including their declarations.
-      CFLAGS: -include X11/XKBlib.h
+      # Define GNU features before the forced header also reaches bundled SDL.
+      CFLAGS: -D_GNU_SOURCE -include X11/XKBlib.h
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
