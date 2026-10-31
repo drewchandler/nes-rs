@@ -66,3 +66,43 @@ ROM; no external ROM is required. CI never publishes a release or deploys Pages.
 Legacy formatting and compiler warnings are not release blockers in this workflow.
 The current codebase predates modern Rust formatting and lint conventions; those
 can be addressed separately rather than preventing builds and tests from running.
+
+## Bumping a version and releasing
+
+Open **Actions → Bump version → Run workflow**, select the default branch
+(`master`), then choose a bump and release channel. The workflow runs CI first,
+updates the root package versions in both `Cargo.toml` and `Cargo.lock`, commits
+the change, and atomically pushes the commit and matching `vX.Y.Z` tag. It then
+explicitly dispatches the existing Release workflow for that tag. This explicit
+dispatch is needed because pushes made with `GITHUB_TOKEN` do not trigger
+other workflows. No additional personal access token is required.
+
+| Bump | Channel | Example |
+| --- | --- | --- |
+| patch | stable | `0.1.0 → 0.1.1` |
+| minor | stable | `0.1.2 → 0.2.0` |
+| major | stable | `0.1.2 → 1.0.0` |
+| minor | alpha | `0.1.0 → 0.2.0-alpha.1` |
+| prerelease | alpha | `0.2.0-alpha.1 → 0.2.0-alpha.2` |
+| prerelease | beta | `0.2.0-alpha.2 → 0.2.0-beta.1` |
+| prerelease | rc | `0.2.0-beta.1 → 0.2.0-rc.1` |
+| promote | stable | `0.2.0-rc.1 → 0.2.0` |
+
+Patch/minor/major always increment that numeric component and start the chosen
+prerelease channel at `.1` if selected. Use `prerelease` to continue the current
+prerelease or move forward from alpha to beta to rc; from a stable version it
+starts a prerelease of the next patch. Use `promote` with `stable` to remove the
+suffix without incrementing the numeric version.
+
+Prereleases publish Mac, Windows, and browser downloads marked as GitHub
+prereleases. They neither become the latest stable release nor deploy to Pages.
+Stable releases update Pages after publishing. The Release workflow validates
+that the tag exactly matches the manifest version, including the prerelease suffix.
+
+Existing tags and mismatched manifest/lockfile versions stop the bump. If the
+default branch moves during CI or before the push, the workflow stops rather
+than tagging a different revision; rerun it against the updated branch.
+Repository rules must allow the workflow token to push the version commit and
+tag. If the push succeeds but release dispatch fails, manually run **Release**
+against the new tag (for example `gh workflow run release.yml --ref v0.1.1`);
+do not bump again just to retry a build.
