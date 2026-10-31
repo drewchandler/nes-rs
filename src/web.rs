@@ -25,17 +25,34 @@ pub extern "C" fn rom_buffer(length: usize) -> *mut u8 {
     })
 }
 
+// Accept NES 2.0 only for the memory, timing, and console configuration the
+// current UxROM core implements. Byte 8 also selects the mapper's bus behavior.
+fn supported_header(header: &[u8]) -> bool {
+    match header[7] & 0x0c {
+        0 => true, // Preserve legacy iNES handling.
+        0x08 => header[7] & 0x03 == 0 && // Standard NES/Famicom console.
+            header[8] >> 4 <= 2 &&
+            header[9] == 0 && // Fixed-size PRG/CHR banks, no extended sizes.
+            header[10] == 0 && // No cartridge PRG RAM or NVRAM.
+            header[11] == 7 && // Exactly 8 KiB CHR RAM, no CHR NVRAM.
+            (header[12] == 0 || header[12] == 2) && // NTSC or dual-region.
+            header[13] == 0 && header[14] == 0,
+        _ => false,
+    }
+}
+
 // 1 = malformed/truncated ROM; 2 = unsupported cartridge; 0 = ready.
 #[no_mangle]
 pub extern "C" fn load_rom() -> u32 {
     BROWSER.with(|state| {
         let mut state = state.borrow_mut();
+        if state.rom.len() < 16 || state.rom[..4] != *b"NES\x1a" { return 1; }
+        if !supported_header(&state.rom[..16]) { return 2; }
         let rom = match Rom::read(&mut Cursor::new(&state.rom)) {
             Ok(rom) => rom,
             Err(_) => return 1,
         };
-        if state.rom[7] & 0x0c != 0 || rom.mapper != 2 ||
-            rom.prg_rom.len() < 2 || !rom.chr_rom.is_empty() { return 2; }
+        if rom.mapper != 2 || rom.prg_rom.len() < 2 || !rom.chr_rom.is_empty() { return 2; }
         let mut nes = Nes::new(rom);
         nes.reset();
         state.nes = Some(nes);
@@ -118,4 +135,34 @@ mod tests {
         assert_eq!(load_rom(), 0);
         assert!(!frame(0).is_null());
     }
+    #[test]
+    fn nes2_uxrom_header_loads_without_accepting_unsupported_layouts() {
+        std::thread::Builder::new().stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                // Metadata matching the reported cartridge; payload is synthetic.
+                let mut bytes = vec![0; 16 + 8 * 16384];
+                bytes[..16].copy_from_slice(&[
+                    0x4e, 0x45, 0x53, 0x1a, 8, 0, 0x21, 0x08,
+                    0x20, 0, 0, 7, 0, 0, 0, 1,
+                ]);
+                bytes[16..19].copy_from_slice(&[0x4c, 0, 0x80]);
+                let reset_high = bytes.len() - 3;
+                bytes[reset_high] = 0x80;
+                upload(&bytes);
+                assert_eq!(load_rom(), 0);
+                assert!(!frame(0).is_null());
+                // Unsupported extended mapper, submapper, sizes, RAM, and timing.
+                for &(offset, value) in &[(8, 0x21), (8, 0x30), (9, 1),
+                                          (10, 7), (11, 8), (12, 1), (7, 0x0c)] {
+                    let original = bytes[offset];
+                    bytes[offset] = value;
+                    upload(&bytes);
+                    assert_eq!(load_rom(), 2, "header byte {}", offset);
+                    bytes[offset] = original;
+                }
+                upload(&bytes[..16]);
+                assert_eq!(load_rom(), 1, "truncated supported NES 2.0 cartridge");
+            }).unwrap().join().unwrap();
+    }
+
 }

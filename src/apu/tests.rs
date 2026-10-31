@@ -20,7 +20,7 @@ fn bus(program: &[u8]) -> MemoryMappingInterconnect {
     MemoryMappingInterconnect::new(Rom {
         prg_rom: vec![prg],
         chr_rom: vec![],
-        mapper: 2,
+        mapper: 2, submapper: 0,
         mirroring: Mirroring::Horizontal,
     })
 }

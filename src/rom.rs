@@ -12,7 +12,8 @@ pub enum Mirroring {
 pub struct Rom {
     pub prg_rom: Vec<Vec<u8>>,
     pub chr_rom: Vec<Vec<u8>>,
-    pub mapper: u8,
+    pub mapper: u16,
+    pub submapper: u8,
     pub mirroring: Mirroring,
 }
 
@@ -29,6 +30,16 @@ impl Rom {
 
         if header[0..4] != *b"NES\x1a" {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid ROM"));
+        }
+
+        let nes2 = header[7] & 0x0c == 0x08;
+        if header[7] & 0x0c != 0 && !nes2 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Unsupported ROM header format"));
+        }
+        // The core stores fixed-size banks. Extended/exponent sizes need a
+        // separate decoder; reject them rather than silently ignoring byte 9.
+        if nes2 && header[9] != 0 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Unsupported NES 2.0 ROM size"));
         }
 
         if header[6] & 0x04 != 0 {
@@ -53,7 +64,9 @@ impl Rom {
         Ok(Rom {
             prg_rom: prg_rom,
             chr_rom: chr_rom,
-            mapper: (header[7] & 0xf0) + (header[6] >> 4),
+            mapper: (header[7] & 0xf0) as u16 | (header[6] >> 4) as u16 |
+                if nes2 { ((header[8] & 0x0f) as u16) << 8 } else { 0 },
+            submapper: if nes2 { header[8] >> 4 } else { 0 },
             mirroring: if header[6] & 0x08 != 0 {
                 Mirroring::FourScreen
             } else if header[6] & 0x01 != 0 {
@@ -99,6 +112,23 @@ mod tests {
                 assert_eq!(actual, if aliases_zero { 0xab } else { 0 });
             }
         }
+    }
+
+    #[test]
+    fn nes2_mapper_extension_and_submapper_are_decoded_separately() {
+        let mut bytes = vec![0; 16 + 16384];
+        bytes[..4].copy_from_slice(b"NES\x1a");
+        bytes[4] = 1;
+        bytes[6] = 0x20;
+        bytes[7] = 0x08;
+        bytes[8] = 0x21; // Mapper 258, submapper 2; must not alias mapper 2.
+        let rom = Rom::read(&mut Cursor::new(&bytes)).unwrap();
+        assert_eq!(rom.mapper, 258);
+        assert_eq!(rom.submapper, 2);
+        bytes[7] = 0; // The same legacy reserved byte has no submapper meaning.
+        let rom = Rom::read(&mut Cursor::new(bytes)).unwrap();
+        assert_eq!(rom.mapper, 2);
+        assert_eq!(rom.submapper, 0);
     }
 
     #[test]
