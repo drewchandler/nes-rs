@@ -49,6 +49,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build release
+        env:
+          # Bundled SDL2 declares CMake 3.0; CMake 4 requires at least 3.5 policies.
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
         run: cargo build --locked --release --bin nes-rs
 
       - name: Install create-dmg
