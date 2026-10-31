@@ -4,6 +4,7 @@ mod sprites;
 use self::vram::Vram;
 use self::sprites::SpritePipeline;
 use rom::Mirroring;
+use mapper::Cartridge;
 
 pub const CTRL_INCR_FLAG: u8 = 0x04;
 const CTRL_BACKGROUND_FLAG: u8 = 0x10;
@@ -67,6 +68,12 @@ pub struct Ppu {
 }
 
 impl Ppu {
+    pub fn with_cartridge(mirroring: Mirroring, cartridge: Cartridge) -> Ppu {
+        let mut ppu = Ppu::with_mirroring(mirroring);
+        ppu.vram.attach_cartridge(cartridge);
+        ppu
+    }
+
     pub fn new() -> Ppu {
         Ppu::with_mirroring(Mirroring::Horizontal)
     }

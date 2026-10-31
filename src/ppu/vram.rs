@@ -1,8 +1,10 @@
 use rom::Mirroring;
+use mapper::Cartridge;
 
 pub struct Vram {
     data: [u8; 16384],
     mirroring: Mirroring,
+    cartridge: Option<Cartridge>,
 }
 
 impl Vram {
@@ -14,7 +16,12 @@ impl Vram {
         Vram {
             data: [0; 16384],
             mirroring: mirroring,
+            cartridge: None,
         }
+    }
+
+    pub fn attach_cartridge(&mut self, cartridge: Cartridge) {
+        self.cartridge = Some(cartridge);
     }
 
     fn map_addr(&self, addr: u16) -> usize {
@@ -42,10 +49,23 @@ impl Vram {
     }
 
     pub fn read(&self, addr: u16) -> u8 {
+        let addr = addr & 0x3fff;
+        if addr < 0x2000 {
+            if let Some(ref cartridge) = self.cartridge {
+                return cartridge.borrow().read_chr(addr);
+            }
+        }
         self.data[self.map_addr(addr)]
     }
 
     pub fn write(&mut self, addr: u16, value: u8) {
+        let addr = addr & 0x3fff;
+        if addr < 0x2000 {
+            if let Some(ref cartridge) = self.cartridge {
+                cartridge.borrow_mut().write_chr(addr, value);
+                return;
+            }
+        }
         let mapped = self.map_addr(addr);
         self.data[mapped] = if mapped >= 0x3f00 {
             value & 0x3f

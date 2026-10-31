@@ -68,27 +68,15 @@ impl RomBus {
 
 fn run_rom(relative: &str, result_addr: u16) {
     let root = env::var("NES_TEST_ROMS").expect("Set NES_TEST_ROMS to the nes-test-roms checkout");
-    let mut rom = Rom::load(Path::new(&root).join(relative)).unwrap();
+    let rom = Rom::load(Path::new(&root).join(relative)).unwrap();
     assert_eq!(
         rom.mapper, 0,
         "This test adapter supports only fixed NROM fixtures"
     );
     assert!(rom.prg_rom.len() == 1 || rom.prg_rom.len() == 2);
     assert!(rom.chr_rom.len() <= 1);
-    let chr = ::std::mem::replace(&mut rom.chr_rom, Vec::new());
-    // Test-only adapter: mapper 2's initial banks reproduce fixed 16/32 KiB
-    // NROM mapping. Preload fixed CHR data; application mapper support stays
-    // unchanged, and the CPU, DMA, PPU ports, and clock loop run normally.
-    rom.mapper = 2;
-    let mut inner = MemoryMappingInterconnect::new(rom);
-    for (addr, value) in chr
-        .iter()
-        .flat_map(|bank| bank.iter())
-        .take(8192)
-        .enumerate()
-    {
-        inner.ppu.vram.write(addr as u16, *value);
-    }
+    // Use the application's NROM mapper for both program and graphics reads.
+    let inner = MemoryMappingInterconnect::new(rom);
     let mut bus = RomBus {
         inner: inner,
         reads: 0,

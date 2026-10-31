@@ -72,15 +72,14 @@ code. The runner waits for the test shell's terminal self-jump, checks its
 actual result byte ($F8 for hit/overflow; $F0 for the older OAM test), and fails
 on a timeout. Intermediate result bytes are not treated as completed results.
 
-The selected ROMs use fixed NROM. A test-only adapter uses mapper 2's initial
-fixed 16/32 KiB PRG mapping and preloads any fixed CHR data into PPU memory.
-The real CPU, DMA, PPU registers, and shared CPU-cycle clock execute the tests.
-This adapter does not add NROM/CHR-ROM support to the application. The APU runs
-alongside the PPU; these tests do not open an audio device.
+The selected ROMs use the application's NROM mapper for fixed PRG and CHR-ROM
+mapping. The real CPU, DMA, PPU registers, and shared CPU-cycle clock execute
+the tests. The APU runs alongside the PPU; these tests do not open an audio device.
 
 ## Limits
 
-The application targets mapper 2 and CHR RAM. CPU bus accesses advance the APU
+The application supports NROM (mapper 0) with CHR-ROM or CHR RAM and UxROM
+(mapper 2) with CHR RAM. CPU bus accesses advance the APU
 once and the PPU three dots, including reset, interrupt, and DMA cycles. Passing
 these sprite timing ROMs is not a claim of universal CPU/PPU race or half-cycle
 bus accuracy. See [audio and shared timing](audio.md) for the clock integration.

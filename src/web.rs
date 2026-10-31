@@ -26,7 +26,7 @@ pub extern "C" fn rom_buffer(length: usize) -> *mut u8 {
 }
 
 // Accept NES 2.0 only for the memory, timing, and console configuration the
-// current UxROM core implements. Byte 8 also selects the mapper's bus behavior.
+// current NROM/UxROM core implements. Byte 8 selects the submapper behavior.
 fn supported_header(header: &[u8]) -> bool {
     match header[7] & 0x0c {
         0 => true, // Preserve legacy iNES handling.
@@ -34,7 +34,9 @@ fn supported_header(header: &[u8]) -> bool {
             header[8] >> 4 <= 2 &&
             header[9] == 0 && // Fixed-size PRG/CHR banks, no extended sizes.
             header[10] == 0 && // No cartridge PRG RAM or NVRAM.
-            header[11] == 7 && // Exactly 8 KiB CHR RAM, no CHR NVRAM.
+            // CHR ROM uses no RAM; CHR-less cartridges need exactly 8 KiB RAM.
+            ((header[5] == 0 && header[11] == 7) ||
+             (header[5] == 1 && header[11] == 0)) &&
             (header[12] == 0 || header[12] == 2) && // NTSC or dual-region.
             header[13] == 0 && header[14] == 0,
         _ => false,
@@ -52,7 +54,13 @@ pub extern "C" fn load_rom() -> u32 {
             Ok(rom) => rom,
             Err(_) => return 1,
         };
-        if rom.mapper != 2 || rom.prg_rom.len() < 2 || !rom.chr_rom.is_empty() { return 2; }
+        let supported = match rom.mapper {
+            0 => rom.submapper == 0 && (rom.prg_rom.len() == 1 || rom.prg_rom.len() == 2) &&
+                rom.chr_rom.len() <= 1,
+            2 => rom.prg_rom.len() >= 2 && rom.chr_rom.is_empty(),
+            _ => false,
+        };
+        if !supported { return 2; }
         let mut nes = Nes::new(rom);
         nes.reset();
         state.nes = Some(nes);
@@ -113,6 +121,7 @@ mod tests {
         let mut bytes = vec![0; 16 + 32768];
         bytes[..4].copy_from_slice(b"NES\x1a");
         bytes[4] = 2;
+        bytes[6] = 0x10; // MMC1 remains unsupported.
         upload(&bytes);
         assert_eq!(load_rom(), 2);
         bytes[6] = 0x20;
@@ -163,6 +172,50 @@ mod tests {
                 upload(&bytes[..16]);
                 assert_eq!(load_rom(), 1, "truncated supported NES 2.0 cartridge");
             }).unwrap().join().unwrap();
+    }
+
+    fn nrom_image(prg_banks: u8, chr_banks: u8, nes2: bool) -> Vec<u8> {
+        let prg_bytes = prg_banks as usize * 16384;
+        let mut bytes = vec![0; 16 + prg_bytes + chr_banks as usize * 8192];
+        bytes[..4].copy_from_slice(b"NES\x1a");
+        bytes[4] = prg_banks;
+        bytes[5] = chr_banks;
+        if nes2 {
+            bytes[7] = 8;
+            bytes[11] = if chr_banks == 0 { 7 } else { 0 };
+        }
+        if prg_bytes != 0 {
+            bytes[16..19].copy_from_slice(&[0x4c, 0, 0x80]);
+            bytes[16 + prg_bytes - 4..16 + prg_bytes - 2].copy_from_slice(&[0, 0x80]);
+        }
+        bytes
+    }
+
+    #[test]
+    fn nrom_loads_supported_memory_layouts_and_rejects_invalid_bank_counts() {
+        std::thread::Builder::new().stack_size(8 * 1024 * 1024).spawn(|| {
+            for &nes2 in &[false, true] {
+                for prg_banks in 1..=2 {
+                    for chr_banks in 0..=1 {
+                        upload(&nrom_image(prg_banks, chr_banks, nes2));
+                        assert_eq!(load_rom(), 0);
+                        assert!(!frame(0).is_null());
+                    }
+                }
+                for &(prg_banks, chr_banks) in &[(0, 1), (3, 1), (1, 2)] {
+                    upload(&nrom_image(prg_banks, chr_banks, nes2));
+                    assert_eq!(load_rom(), 2);
+                }
+            }
+            let mut bytes = nrom_image(1, 1, true);
+            bytes[8] = 0x10; // NROM has no implemented submapper 1.
+            upload(&bytes);
+            assert_eq!(load_rom(), 2);
+            bytes[8] = 0;
+            bytes[11] = 7; // Simultaneous CHR-ROM and CHR RAM is unsupported.
+            upload(&bytes);
+            assert_eq!(load_rom(), 2);
+        }).unwrap().join().unwrap();
     }
 
 }

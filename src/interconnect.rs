@@ -1,9 +1,12 @@
 use joypad::Joypad;
-use mapper::Mapper;
+use mapper::{Cartridge, Mapper};
+use mapper::nrom::Nrom;
 use mapper::unrom::Unrom;
 use ppu::Ppu;
 use rom::Rom;
 use apu::Apu;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub trait Interconnect {
     fn read_double(&mut self, addr: u16) -> u16;
@@ -23,7 +26,7 @@ pub trait Interconnect {
 }
 
 pub struct MemoryMappingInterconnect {
-    mapper: Box<Mapper>,
+    mapper: Cartridge,
     ram: [u8; 2048],
     open_bus: u8,
     pub ppu: Ppu,
@@ -83,14 +86,17 @@ fn map_addr(addr: u16) -> MappedAddress {
 
 impl MemoryMappingInterconnect {
     pub fn new(rom: Rom) -> MemoryMappingInterconnect {
-        let ppu = Ppu::with_mirroring(rom.mirroring);
-        let mapper = match rom.mapper {
-            2 => Unrom::new(rom),
+        let mirroring = rom.mirroring;
+        let mapper: Box<dyn Mapper> = match rom.mapper {
+            0 => Box::new(Nrom::new(rom)),
+            2 => Box::new(Unrom::new(rom)),
             _ => panic!("Unimplemented mapper"),
         };
+        let mapper = Rc::new(RefCell::new(mapper));
+        let ppu = Ppu::with_cartridge(mirroring, mapper.clone());
 
         MemoryMappingInterconnect {
-            mapper: Box::new(mapper),
+            mapper: mapper,
             ram: [0; 2048],
             open_bus: 0,
             ppu: ppu,
@@ -149,7 +155,7 @@ impl Interconnect for MemoryMappingInterconnect {
     fn read_word(&mut self, addr: u16) -> u8 {
         let value = match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr],
-            MappedAddress::PrgRom => self.mapper.read(addr),
+            MappedAddress::PrgRom => self.mapper.borrow().read(addr),
             MappedAddress::PpuControlRegister |
             MappedAddress::PpuMaskRegister |
             MappedAddress::PpuStatusRegister |
@@ -173,7 +179,7 @@ impl Interconnect for MemoryMappingInterconnect {
         self.open_bus = value;
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr] = value,
-            MappedAddress::PrgRom => self.mapper.write(addr, value),
+            MappedAddress::PrgRom => self.mapper.borrow_mut().write(addr, value),
             MappedAddress::PpuControlRegister |
             MappedAddress::PpuMaskRegister |
             MappedAddress::PpuStatusRegister |
