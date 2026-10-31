@@ -1,0 +1,82 @@
+name: Bump version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version change (promote removes the prerelease suffix)'
+        type: choice
+        options: [patch, minor, major, prerelease, promote]
+        default: patch
+      channel:
+        description: 'Release channel (prerelease increments alpha/beta/rc)'
+        type: choice
+        options: [stable, alpha, beta, rc]
+        default: stable
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bump-version
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    uses: ./.github/workflows/ci.yml
+
+  bump:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Reject a stale workflow run
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: test "$(git rev-parse HEAD)" = "$(git rev-parse "origin/$DEFAULT_BRANCH")"
+      - name: Update package and lockfile versions
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          CHANNEL: ${{ inputs.channel }}
+        run: python scripts/bump-version.py "$BUMP" "$CHANNEL"
+      - name: Validate package metadata and tag availability
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          cargo metadata --locked --offline --no-deps --format-version 1 > /dev/null
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            echo "Tag $TAG already exists" >&2
+            exit 1
+          fi
+      - name: Commit version and push tag atomically
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git commit -m "Release $TAG"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push --atomic origin "HEAD:refs/heads/$DEFAULT_BRANCH" "refs/tags/$TAG"
+      - name: Start release builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh workflow run release.yml --ref "$TAG"
+      - name: Summarize release
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: echo "Committed and tagged $TAG; dispatched the Release workflow." >> "$GITHUB_STEP_SUMMARY"

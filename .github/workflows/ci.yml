@@ -5,6 +5,7 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -51,3 +52,13 @@ jobs:
         run: node --input-type=module --check < web/app.js
       - name: Exercise the compiled Wasm interface
         run: node scripts/check-web.mjs
+
+  release-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test version and release helpers
+        run: python -m unittest discover -s scripts -p 'test_*.py' -v
