@@ -1,23 +1,13 @@
-extern crate minifb;
-extern crate blip_buf;
-extern crate sdl2;
+#[cfg(not(target_arch = "wasm32"))]
+extern crate nes_rs;
 
-mod apu;
-mod audio;
-mod cpu;
-mod emulator;
-mod interconnect;
-mod joypad;
-mod mapper;
-mod nes;
-mod ppu;
-mod rom;
-
-use std::env;
-
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    let rom_filename = env::args().nth(1).unwrap();
-    let rom = rom::Rom::load(rom_filename).unwrap();
-    let mut emulator = emulator::Emulator::new(rom);
+    let rom_filename = std::env::args().nth(1).expect("Usage: nes-rs <ROM>");
+    let rom = nes_rs::rom::Rom::load(rom_filename).unwrap();
+    let mut emulator = nes_rs::emulator::Emulator::new(rom);
     emulator.run();
 }
+
+#[cfg(target_arch = "wasm32")]
+fn main() {}

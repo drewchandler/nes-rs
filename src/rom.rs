@@ -23,7 +23,7 @@ impl Rom {
         Rom::read(&mut file)
     }
 
-    fn read<R: Read>(file: &mut R) -> io::Result<Rom> {
+    pub fn read<R: Read>(file: &mut R) -> io::Result<Rom> {
         let mut header = [0u8; 16];
         file.read_exact(&mut header)?;
 
