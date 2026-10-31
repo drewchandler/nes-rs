@@ -70,15 +70,16 @@ can be addressed separately rather than preventing builds and tests from running
 ## Bumping a version and releasing
 
 Open **Actions → Bump version → Run workflow**, select the default branch
-(`master`), then choose a bump and release channel. The workflow runs CI first,
-updates the root package versions in both `Cargo.toml` and `Cargo.lock`, commits
+(`master`), then choose a bump and release channel. The workflow updates the
+root package versions in both `Cargo.toml` and `Cargo.lock`, commits
 the change, and atomically pushes the commit and matching `vX.Y.Z` tag. It then
 explicitly dispatches the existing Release workflow for that tag. This explicit
 dispatch is needed because pushes made with `GITHUB_TOKEN` do not trigger
 other workflows. No additional personal access token is required.
 
-Version-helper tests run only in **Bump version**, before any files are changed.
-They do not add a job or test step to ordinary pull-request CI.
+Run the bump after the code has passed normal CI. The bump workflow performs
+version and tag consistency checks, then commits, tags, and starts release builds.
+It does not rerun CI or the version-helper tests.
 
 | Bump | Channel | Example |
 | --- | --- | --- |
@@ -103,7 +104,7 @@ Stable releases update Pages after publishing. The Release workflow validates
 that the tag exactly matches the manifest version, including the prerelease suffix.
 
 Existing tags and mismatched manifest/lockfile versions stop the bump. If the
-default branch moves during CI or before the push, the workflow stops rather
+default branch moves before the push, the workflow stops rather
 than tagging a different revision; rerun it against the updated branch.
 Repository rules must allow the workflow token to push the version commit and
 tag. If the push succeeds but release dispatch fails, manually run **Release**
