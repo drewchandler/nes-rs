@@ -22,6 +22,8 @@ impl Registers {
     }
 }
 impl Mapper for Registers {
+    fn memory(&self) -> Option<&Memory> { Some(&self.mem) }
+    fn memory_mut(&mut self) -> Option<&mut Memory> { Some(&mut self.mem) }
     fn read(&self, addr: u16) -> u8 {
         let slot = (addr - 0x8000) as usize / 8192;
         let last = self.mem.prg.len() / 8192 - 1;
@@ -77,3 +79,5 @@ impl Mapper for Registers {
         let offset = self.chr_addr(addr); self.mem.chr.write(offset, value);
     }
 }
+
+state_fields!(Registers, mem,prg,chr,mode,mirror);

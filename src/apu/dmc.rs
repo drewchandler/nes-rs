@@ -3,6 +3,7 @@ pub(super) const PERIODS: [u16; 16] = [
 ];
 
 pub(super) struct Dmc {
+    pub pal: bool,
     pub irq_enabled: bool,
     pub irq: bool,
     pub looping: bool,
@@ -23,6 +24,7 @@ pub(super) struct Dmc {
 impl Dmc {
     pub fn new() -> Dmc {
         Dmc {
+            pal: false,
             irq_enabled: false,
             irq: false,
             looping: false,
@@ -108,7 +110,14 @@ impl Dmc {
             self.timer -= 1;
             return;
         }
-        self.timer = PERIODS[self.rate as usize] - 1;
+        let periods = if self.pal {
+            [
+                398, 354, 316, 298, 276, 236, 210, 198, 176, 148, 132, 118, 98, 78, 66, 50,
+            ]
+        } else {
+            PERIODS
+        };
+        self.timer = periods[self.rate as usize] - 1;
         if !self.silent {
             if self.shift & 1 != 0 {
                 if self.output <= 125 {
@@ -132,3 +141,5 @@ impl Dmc {
         }
     }
 }
+
+state_fields!(Dmc, irq_enabled,irq,looping,rate,output,sample_address,sample_length,address,remaining,buffer,shift,bits,silent,timer,dma_delay;|s: &Dmc| s.rate<16 && s.output<128 && s.bits>=1 && s.bits<=8 && s.remaining<=4081 && s.dma_delay<=3 && s.address>=0x8000);

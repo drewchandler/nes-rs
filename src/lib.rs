@@ -1,4 +1,9 @@
 extern crate blip_buf;
+#[macro_use] mod state;
+mod digest;
+#[cfg(not(target_arch="wasm32"))] mod persistence;
+#[cfg(not(target_arch="wasm32"))] mod controls;
+pub mod region;
 #[cfg(not(target_arch = "wasm32"))]
 extern crate minifb;
 #[cfg(not(target_arch = "wasm32"))]

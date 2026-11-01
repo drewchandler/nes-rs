@@ -18,6 +18,8 @@ impl ChrMemory {
         ChrMemory { data, writable }
     }
 
+    pub fn bytes(&self) -> &[u8] { &self.data }
+    pub fn bytes_mut(&mut self) -> &mut [u8] { &mut self.data }
     pub fn is_ram(&self) -> bool { self.writable }
 
     pub fn read(&self, addr: usize) -> u8 { self.data[addr % self.data.len()] }
@@ -26,5 +28,12 @@ impl ChrMemory {
             let index = addr % self.data.len();
             self.data[index] = value;
         }
+    }
+}
+
+impl ::state::Snapshot for ChrMemory {
+    fn save(&self, w: &mut ::state::Writer) { if self.writable { ::state::Snapshot::save(&self.data,w); } }
+    fn load(&mut self, r: &mut ::state::Reader) -> ::state::Result<()> {
+        if self.writable { ::state::Snapshot::load(&mut self.data,r)?; } Ok(())
     }
 }

@@ -11,18 +11,19 @@ fn clock(apu: &mut Apu, cycles: usize) {
     }
 }
 
-fn bus(program: &[u8]) -> MemoryMappingInterconnect {
+fn bus(program: &[u8]) -> MemoryMappingInterconnect { MemoryMappingInterconnect::new(test_rom(program)) }
+fn test_rom(program: &[u8]) -> Rom {
     let mut prg = vec![0xea; 16384];
     prg[..program.len()].copy_from_slice(program);
     prg[0x3ffc..0x4000].copy_from_slice(&[0, 0xc0, 0, 0xc1]);
     // IRQ handler increments RAM without relying on a test-only CPU accessor.
     prg[0x100..0x103].copy_from_slice(&[0xe6, 0, 0x40]);
-    MemoryMappingInterconnect::new(Rom {
+    Rom { prg_nvram_size: 0, chr_nvram_size: 0, region: ::region::Region::Ntsc,
         prg_rom: vec![prg],
         chr_rom: vec![],
         mapper: 2, submapper: 0, prg_ram_size: 0, chr_ram_size: 8192, nes2: false,
         mirroring: Mirroring::Horizontal,
-    })
+    }
 }
 
 #[test]
@@ -636,10 +637,7 @@ fn real_cpu_frames_produce_expected_pulse_triangle_and_dmc_pitches() {
         program.extend_from_slice(&[0x4c, loop_address as u8, (loop_address >> 8) as u8]);
         program.resize(0x401, 0xea);
         program[0x400] = 0x0f; // Repeated DMC byte: four up steps, four down.
-        let mut nes = Nes {
-            cpu: Cpu::new(),
-            interconnect: bus(&program),
-        };
+        let mut nes = Nes::new(test_rom(&program));
         nes.reset();
         let mut samples = vec![];
         for _ in 0..100 {

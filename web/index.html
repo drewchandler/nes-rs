@@ -5,27 +5,52 @@
 <title>NES · Play in your browser</title>
 <style>
   :root { color-scheme: dark; font: 17px system-ui, sans-serif; background: #10131b; color: #edf0fa; }
-  body { max-width: 800px; margin: 3rem auto; padding: 0 1rem; }
+  body { max-width: 850px; margin: 2rem auto; padding: 0 1rem; }
   h1 { letter-spacing: -.04em; }
-  canvas { display: block; width: min(100%, 768px); height: auto; background: #000; image-rendering: pixelated; margin: 1.5rem 0; border-radius: 4px; }
-  button, input { font: inherit; margin: .4rem .4rem .4rem 0; }
-  button { padding: .45rem 1rem; cursor: pointer; }
+  canvas { display: block; width: min(100%, 768px); height: auto; background: #000; image-rendering: pixelated; margin: 1.2rem 0; border-radius: 4px; }
+  button, input, select { font: inherit; margin: .3rem .4rem .3rem 0; max-width: 100%; }
+  button, select { padding: .45rem .7rem; }
+  button { cursor: pointer; }
   p { line-height: 1.6; color: #bbc3d8; }
-  #status { min-height: 1.6em; }
+  a { color: #a4c6ff; }
+  #status, #notice { min-height: 1.4em; }
+  #notice { color: #f4d38b; }
+  details { margin: 1rem 0; }
+  .file-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  dialog { max-width: min(95vw, 760px); max-height: 90vh; border: 1px solid #495775; border-radius: 8px; }
+  dialog::backdrop { background: #000a; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  td, th { text-align: left; padding: .2rem .4rem; }
+  :focus-visible { outline: 2px solid #a4c6ff; outline-offset: 3px; }
 </style>
 <main>
 <h1>NES in your browser</h1>
-<p>Choose a .nes ROM in iNES or NES 2.0 format. Supports NROM, UxROM, MMC1, MMC3, and more. Your ROM stays on your device.</p>
-<label for="rom">ROM file</label>
-<input id="rom" type="file" accept=".nes,application/octet-stream" disabled>
-<button id="pause" disabled>Pause</button>
-<button id="mute" disabled>Mute</button>
+<p>Play a homebrew demo or choose your own .nes file. Your ROM and saves stay on your device.</p>
+<div class="file-row">
+<label for="demo">Try a game</label>
+<select id="demo" disabled><option value="">Choose a demo…</option><option value="2048">2048</option><option value="concentration-room">Concentration Room</option></select>
+<label for="rom">Load ROM</label><input id="rom" type="file" accept=".nes,application/octet-stream" disabled>
+</div>
+<label for="region">TV system for the next game</label>
+<select id="region"><option value="0">Auto</option><option value="1">NTSC</option><option value="2">PAL</option><option value="3">Dendy</option></select>
 <p id="status" role="status">Loading emulator…</p>
-<canvas id="screen" width="256" height="240" aria-label="NES game screen"></canvas>
-<p>Arrow keys: move · Z: A · X: B · Right Shift: Select · Enter: Start<br>
-Choose another ROM to restart. Emulation pauses when you leave this tab.<br>
-Save data lasts until you reload or choose another ROM.
-<a href="https://github.com/drewchandler/nes-rs/blob/master/docs/mappers.md">Supported cartridges</a></p>
+<canvas id="screen" width="256" height="240" tabindex="0" aria-label="NES game screen"></canvas>
+<button id="pause" data-needs-game disabled>Pause</button><button id="mute" data-needs-game disabled>Mute</button><button id="controls">Controls</button>
+<button id="save-state" data-needs-game disabled>Save state · F5</button><button id="load-state" data-needs-game disabled>Load state · F8</button>
+<p id="notice" role="status" aria-live="polite"></p>
+<details><summary>Save files</summary>
+<p>Games with battery-backed saving are saved automatically in this browser. Export a game save to back it up or move it between desktop and browser. Save states capture the entire game at the current moment.</p>
+<button id="export-save" disabled>Export game save</button><label for="import-save">Import game save</label><input id="import-save" type="file" accept=".sav,application/octet-stream" disabled>
+<br><button id="export-state" data-needs-game disabled>Export state</button><label for="import-state">Import state</label><input id="import-state" type="file" accept=".nss,application/octet-stream" data-needs-game disabled>
+</details>
+<p>Player 1: arrows · Z/X: A/B · Right Shift: Select · Enter: Start<br>Player 2: WASD · G/F: A/B · R: Select · T: Start<br>Connect up to two gamepads. Remap keys and buttons in Controls. Emulation pauses while this tab is hidden.</p>
+<p><a href="./credits.html">Demo credits and licenses</a> · <a href="https://github.com/drewchandler/nes-rs/blob/master/docs/mappers.md">Supported cartridges</a></p>
 </main>
+<dialog id="controls-dialog" aria-labelledby="controls-title">
+<h2 id="controls-title">Controls</h2><p>Choose a binding, then press the new key or controller button. The first two connected controllers become players 1 and 2. Analog sticks and the D-pad both move.</p>
+<p id="binding-status" role="status">Escape cancels a binding.</p>
+<table><thead><tr><th>Player</th><th>Action</th><th>Keyboard</th><th>Gamepad</th></tr></thead><tbody id="bindings"></tbody></table>
+<button id="reset-controls">Restore defaults</button><form method="dialog"><button>Done</button></form>
+</dialog>
 <script type="module" src="./app.js"></script>
 </html>

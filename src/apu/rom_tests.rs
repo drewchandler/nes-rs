@@ -100,7 +100,8 @@ impl Interconnect for TestBus {
 
 fn run_rom(relative: &str, legacy: bool) {
     let root = env::var("NES_TEST_ROMS").expect("Set NES_TEST_ROMS; see docs/audio.md");
-    let rom = Rom::load(Path::new(&root).join(relative)).unwrap();
+    let mut rom = Rom::load(Path::new(&root).join(relative)).unwrap();
+    if relative.starts_with("pal_apu_tests/") {rom.region=::region::Region::Pal;}
     assert_eq!(rom.mapper, 0, "Test adapter requires fixed NROM");
     assert!(rom.prg_rom.len() == 1 || rom.prg_rom.len() == 2);
     assert!(rom.chr_rom.len() <= 1);
@@ -121,12 +122,13 @@ fn run_rom(relative: &str, legacy: bool) {
         let cycles = cpu.step(&mut bus);
         if legacy {
             if bus.halted(cycles) {
-                let result = bus.read_word(0xf0);
+                let result_addr=if relative.starts_with("pal_apu_tests/"){0xf8}else{0xf0};
+                let result = bus.read_word(result_addr);
                 println!(
                     "{}: result={}, cycles={}",
                     relative, result, bus.inner.cpu_cycles
                 );
-                assert_eq!(result, 1, "{} failed (legacy shell result $F0)", relative);
+                assert_eq!(result, 1, "{} failed (legacy shell result ${:02X})", relative,result_addr);
                 return;
             }
         } else if bus.ram[1..4] == [0xde, 0xb0, 0x61] {
@@ -235,3 +237,23 @@ fixture!(reset_4017_written, "apu_reset/4017_written.nes", false);
 fixture!(reset_irq, "apu_reset/irq_flag_cleared.nes", false);
 fixture!(reset_length, "apu_reset/len_ctrs_enabled.nes", false);
 fixture!(reset_immediate, "apu_reset/works_immediately.nes", false);
+
+fixture!(pal_length, "pal_apu_tests/01.len_ctr.nes", true);
+
+fixture!(pal_table, "pal_apu_tests/02.len_table.nes", true);
+
+fixture!(pal_irq_flag, "pal_apu_tests/03.irq_flag.nes", true);
+
+fixture!(pal_jitter, "pal_apu_tests/04.clock_jitter.nes", true);
+
+fixture!(pal_timing0, "pal_apu_tests/05.len_timing_mode0.nes", true);
+
+fixture!(pal_timing1, "pal_apu_tests/06.len_timing_mode1.nes", true);
+
+fixture!(pal_flag_timing, "pal_apu_tests/07.irq_flag_timing.nes", true);
+
+fixture!(pal_irq_timing, "pal_apu_tests/08.irq_timing.nes", true);
+
+fixture!(pal_halt_timing, "pal_apu_tests/10.len_halt_timing.nes", true);
+
+fixture!(pal_reload_timing, "pal_apu_tests/11.len_reload_timing.nes", true);

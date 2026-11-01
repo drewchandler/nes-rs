@@ -48,6 +48,8 @@ impl Mmc3 {
     }
 }
 impl Mapper for Mmc3 {
+    fn memory(&self) -> Option<&Memory> { Some(&self.mem) }
+    fn memory_mut(&mut self) -> Option<&mut Memory> { Some(&mut self.mem) }
     fn read(&self, addr: u16) -> u8 {
         let last = self.mem.prg.len() / 8192 - 1;
         let swap = self.select & 0x40 != 0;
@@ -121,3 +123,5 @@ impl Mapper for Mmc3 {
         let offset = self.chr_addr(addr); self.mem.chr.write(offset, value);
     }
 }
+
+state_fields!(Mmc3, mem,select,banks,ram_control,mirroring,latch,counter,reload,enabled,pending,a12,low_since);

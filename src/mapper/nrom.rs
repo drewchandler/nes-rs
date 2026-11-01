@@ -1,38 +1,16 @@
-use mapper::chr::ChrMemory;
-use mapper::Mapper;
+use mapper::{Mapper, memory::Memory};
 use rom::Rom;
-
-pub struct Nrom {
-    prg_rom: Vec<Vec<u8>>,
-    chr: ChrMemory,
-}
-
-impl Nrom {
-    pub fn new(rom: Rom) -> Nrom {
-        assert!(rom.prg_rom.len() == 1 || rom.prg_rom.len() == 2,
-                "NROM requires 16 or 32 KiB PRG ROM");
-        Nrom {
-            prg_rom: rom.prg_rom,
-            chr: ChrMemory::new(rom.chr_rom),
-        }
-    }
-}
-
+pub struct Nrom { mem: Memory }
+impl Nrom { pub fn new(rom: Rom) -> Nrom { Nrom {mem:Memory::new(rom)} } }
 impl Mapper for Nrom {
-    fn read(&self, addr: u16) -> u8 {
-        assert!(addr >= 0x8000, "Invalid NROM CPU address");
-        let offset = (addr - 0x8000) as usize;
-        // NROM-128 repeats its 16 KiB bank; NROM-256 maps both banks.
-        self.prg_rom[offset / 16384 % self.prg_rom.len()][offset % 16384]
-    }
-
-    fn write(&mut self, _addr: u16, _value: u8) {
-        // NROM has no bank registers and CPU writes cannot change PRG ROM.
-    }
-
-    fn read_chr(&self, addr: u16) -> Option<u8> { Some(self.chr.read(addr as usize)) }
-    fn write_chr(&mut self, addr: u16, value: u8) { self.chr.write(addr as usize, value); }
+    fn memory(&self) -> Option<&Memory> { Some(&self.mem) }
+    fn memory_mut(&mut self) -> Option<&mut Memory> { Some(&mut self.mem) }
+    fn read(&self, addr: u16) -> u8 { assert!(addr>=0x8000); self.mem.prg(addr,32768,0) }
+    fn write(&mut self, _addr: u16, _value: u8) {}
+    fn read_low(&self, addr:u16) -> Option<u8> { self.mem.read_ram(addr) }
+    fn write_low(&mut self, addr:u16, value:u8) { self.mem.write_ram(addr,value); }
+    fn read_chr(&self, addr:u16) -> Option<u8> { Some(self.mem.chr.read(addr as usize)) }
+    fn write_chr(&mut self, addr:u16, value:u8) { self.mem.chr.write(addr as usize,value); }
 }
-
-#[cfg(test)]
-mod tests;
+state_fields!(Nrom, mem);
+#[cfg(test)] mod tests;

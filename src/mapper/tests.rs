@@ -13,7 +13,7 @@ fn image(id: u16, prg_kb: usize, chr_kb: usize, chr_ram: usize, ram: usize, sub:
     for (bank, bytes) in chr_rom.iter_mut().enumerate() {
         for offset in 0..8192 { bytes[offset] = (bank * 8 + offset / 1024) as u8; }
     }
-    Rom { prg_rom, chr_rom, mapper: id, submapper: sub, mirroring: Mirroring::Vertical,
+    Rom { prg_nvram_size: 0, chr_nvram_size: 0, region: ::region::Region::Ntsc, prg_rom, chr_rom, mapper: id, submapper: sub, mirroring: Mirroring::Vertical,
         prg_ram_size: ram, chr_ram_size: chr_ram, nes2: true }
 }
 fn make(id: u16) -> Rom {
@@ -28,6 +28,7 @@ fn make(id: u16) -> Rom {
         10 => image(id, 256, 128, 0, 8192, 0),
         11 | 70 | 75 | 89 | 140 | 152 => image(id, 128, 128, 0, 0, 0),
         13 => image(id, 32, 0, 16384, 0, 0),
+        24 | 26 | 69 => image(id,128,128,0,8192,0),
         32 => image(id, 128, 128, 0, 8192, 0),
         34 => image(id, 128, 0, 8192, 0, 2),
         38 | 66 => image(id, 128, 32, 0, 0, 0),
@@ -326,4 +327,46 @@ fn banked_chr_rom_is_read_only_and_sunsoft93_disabled_ram_floats_the_bus() {
     bus.write_word(0x8000, 1);
     bus.write_word(0x2006, 0); bus.write_word(0x2006, 0);
     bus.read_word(0x2007); assert_eq!(bus.read_word(0x2007), 0xab, "disabled writes preserve RAM");
+}
+
+#[test]
+fn vrc6_bank_modes_address_wiring_nametables_ram_and_irq_work_together() {
+    for id in [24,26] {
+        let address=|a:u16|if id==26{(a&!3)|((a&1)<<1)|((a&2)>>1)}else{a};
+        let mut m=create(make(id));
+        m.write(address(0x8000),3);m.write(address(0xc000),5);
+        assert_eq!(m.read(0x8100),6);assert_eq!(m.read(0xc100),5);assert_eq!(m.read(0xe100),15);
+        for reg in 0..8 {m.write(address(if reg<4{0xd000+reg}else{0xe000+reg-4}),(reg+1) as u8);}
+        for &(control,expected) in &[(0x20,[1,2,3,4,5,6,7,8]),(0x21,[0,1,2,3,2,3,4,5]),(0x22,[1,2,3,4,4,5,6,7]),(1,[1,1,2,2,3,3,4,4])] {
+            m.write(address(0xb003),control);
+            for slot in 0..8{assert_eq!(m.read_chr(slot*1024+0x100),Some(expected[slot as usize]));}
+        }
+        for &(control,pages) in &[(0x20,[0,1,0,1]),(0x24,[0,0,1,1]),(0x28,[0,0,0,0]),(0x2c,[1,1,1,1])] {
+            m.write(address(0xb003),control);for table in 0..4{assert_eq!(m.ciram_page(table),Some(pages[table]));}
+        }
+        m.write(address(0xb003),0x31);
+        for table in 0..4{assert_eq!(m.nametable_read(0x2100+table*1024),Some(5+table as u8));}
+        m.write(address(0xb003),0xa0);m.write_low(0x6000,0x55);assert_eq!(m.read_low(0x6000),Some(0x55));
+        m.write(address(0xb003),0x20);assert_eq!(m.read_low(0x6000),None);
+        m.write(address(0xf000),254);m.write(address(0xf001),6);
+        m.clock_cpu();assert!(!m.irq());m.clock_cpu();assert!(m.irq());
+        m.write(address(0xf002),0);for _ in 0..300{m.clock_cpu();}assert!(!m.irq());
+        m.write(address(0xf000),255);m.write(address(0xf001),3);
+        for _ in 0..113{m.clock_cpu();}assert!(!m.irq());m.clock_cpu();assert!(m.irq());
+    }
+}
+#[test]
+fn fme7_low_rom_ram_protection_banks_and_cpu_counter_underflow() {
+    let mut m=create(make(69));
+    fn command(m:&mut dyn Mapper,reg:u8,value:u8){m.write(0x8000,reg);m.write(0xa000,value);}
+    for &(reg,value) in &[(9,3),(10,4),(11,5)]{command(&mut *m,reg,value);}
+    assert_eq!(m.read(0x8100),3);assert_eq!(m.read(0xa100),4);assert_eq!(m.read(0xc100),5);assert_eq!(m.read(0xe100),15);
+    command(&mut *m,8,2);assert_eq!(m.read_low(0x6100),Some(2));
+    command(&mut *m,8,0xc0);m.write_low(0x6000,0x77);assert_eq!(m.read_low(0x6000),Some(0x77));
+    command(&mut *m,8,0x40);assert_eq!(m.read_low(0x6000),None);
+    command(&mut *m,8,0xc0);assert_eq!(m.read_low(0x6000),Some(0x77));
+    command(&mut *m,14,2);command(&mut *m,15,0);command(&mut *m,13,0x81);
+    m.clock_cpu();m.clock_cpu();assert!(!m.irq());m.clock_cpu();assert!(m.irq());
+    command(&mut *m,13,0);assert!(!m.irq());
+    command(&mut *m,0,12);assert_eq!(m.read_chr(0x0100),Some(12));
 }

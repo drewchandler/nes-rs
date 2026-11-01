@@ -1775,3 +1775,5 @@ mod tests {
 
 #[cfg(test)]
 mod regression_tests;
+
+state_fields!(Cpu, a,p,pc,sp,x,y,cycles,extra_cycles,indexed_read,pending_dma,pending_nmi,pending_irq);

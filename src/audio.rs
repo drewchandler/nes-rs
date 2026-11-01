@@ -33,6 +33,8 @@ impl AudioOutput {
         })
     }
 
+    pub fn clear(&self) { self.queue.clear(); }
+
     pub fn submit(&mut self, samples: &[i16]) -> Result<(), String> {
         self.queue.queue_audio(samples)?;
         if !self.started && !samples.is_empty() {
@@ -59,9 +61,9 @@ pub struct FramePacer {
 }
 
 impl FramePacer {
-    pub fn new() -> FramePacer {
-        // NTSC alternates 89342/89341 PPU dots with rendering enabled.
-        let seconds = (341.0 * 262.0 - 0.5) / (CPU_HZ * 3.0);
+    pub fn new() -> FramePacer { Self::with_fps(::region::Region::Ntsc.fps()) }
+    pub fn with_fps(fps: f64) -> FramePacer {
+        let seconds = 1.0 / fps;
         FramePacer {
             next: Instant::now(),
             period: Duration::from_secs_f64(seconds),

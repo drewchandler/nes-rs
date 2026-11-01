@@ -47,13 +47,14 @@ impl Vram {
             let table = offset / 0x400;
             let mirroring = self.cartridge.as_ref().and_then(|c| c.borrow().mirroring())
                 .unwrap_or(self.mirroring);
-            let physical = match mirroring {
+            let override_page=self.cartridge.as_ref().and_then(|c|c.borrow().ciram_page(table as usize));
+            let physical = override_page.map(|p|p as u16).unwrap_or_else(||match mirroring {
                 Mirroring::Horizontal => table / 2,
                 Mirroring::Vertical => table % 2,
                 Mirroring::FourScreen => table,
                 Mirroring::SingleLower => 0,
                 Mirroring::SingleUpper => 1,
-            };
+            });
             (0x2000 + physical * 0x400 + (offset & 0x3ff)) as usize
         } else {
             let mut index = addr & 0x1f;
@@ -74,6 +75,7 @@ impl Vram {
                 self.bus_latch.set(value);
                 return value;
             }
+            if addr<0x3f00 {if let Some(value)=mapper.nametable_read(addr){self.bus_latch.set(value);return value;}}
         }
         let value = self.data[self.map_addr(addr)];
         if addr < 0x3f00 { self.bus_latch.set(value); }
@@ -87,6 +89,7 @@ impl Vram {
             let mut mapper = cartridge.borrow_mut();
             if addr < 0x3f00 { mapper.ppu_address(addr, self.cycle); }
             if addr < 0x2000 { mapper.write_chr(addr, value); return; }
+            if addr<0x3f00 && mapper.nametable_write(addr,value) {return;}
         }
         let mapped = self.map_addr(addr);
         self.data[mapped] = if mapped >= 0x3f00 {
@@ -96,3 +99,5 @@ impl Vram {
         };
     }
 }
+
+state_fields!(Vram, data,cycle,bus_latch);

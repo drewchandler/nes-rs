@@ -20,6 +20,8 @@ impl Mmc2 {
     }
 }
 impl Mapper for Mmc2 {
+    fn memory(&self) -> Option<&Memory> { Some(&self.mem) }
+    fn memory_mut(&mut self) -> Option<&mut Memory> { Some(&mut self.mem) }
     fn read(&self, addr: u16) -> u8 {
         let size = if self.mmc4 { 16384 } else { 8192 };
         let slot = (addr - 0x8000) as usize / size;
@@ -53,3 +55,5 @@ impl Mapper for Mmc2 {
     }
     fn write_chr(&mut self, _addr: u16, _value: u8) {}
 }
+
+state_fields!(Mmc2, mem,prg,chr,latch,mirroring);

@@ -33,6 +33,8 @@ impl Mmc1 {
     }
 }
 impl Mapper for Mmc1 {
+    fn memory(&self) -> Option<&Memory> { Some(&self.mem) }
+    fn memory_mut(&mut self) -> Option<&mut Memory> { Some(&mut self.mem) }
     fn read(&self, addr: u16) -> u8 {
         if self.mem.submapper == 5 { return self.mem.prg(addr, 32768, 0); }
         let outer = if self.mem.prg.len() > 262144 { (self.chr0 & 0x10) as usize } else { 0 };
@@ -85,3 +87,5 @@ impl Mapper for Mmc1 {
         let offset = self.chr_addr(addr); self.mem.chr.write(offset, value);
     }
 }
+
+state_fields!(Mmc1, mem,shift,control,chr0,chr1,prg,last_write;|s: &Mmc1| s.shift<32 && s.control<32 && s.chr0<32 && s.chr1<32 && s.prg<32);

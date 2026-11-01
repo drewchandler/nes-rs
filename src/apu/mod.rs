@@ -8,6 +8,7 @@ use self::mixer::{mix, Mixer};
 pub use self::mixer::{CPU_HZ, SAMPLE_RATE};
 
 pub struct Apu {
+    pal: bool,
     pulse1: Pulse,
     pulse2: Pulse,
     triangle: Triangle,
@@ -31,6 +32,7 @@ impl Apu {
         let mut triangle = Triangle::default();
         triangle.position = 15; // Power-up DAC value zero.
         Apu {
+            pal: false,
             pulse1,
             pulse2: Pulse::default(),
             triangle,
@@ -46,6 +48,15 @@ impl Apu {
             length_clocked: false,
             mixer: Mixer::new(),
         }
+    }
+
+    pub fn with_region(region: ::region::Region) -> Apu {
+        let mut apu = Self::new();
+        apu.pal = region == ::region::Region::Pal;
+        apu.noise.pal = apu.pal;
+        apu.dmc.pal = apu.pal;
+        apu.mixer = Mixer::with_rate(region.cpu_hz());
+        apu
     }
 
     pub fn reset(&mut self) {
@@ -132,34 +143,32 @@ impl Apu {
     }
 
     pub fn step(&mut self) {
+        self.step_with_audio(0.0);
+    }
+    pub fn step_with_audio(&mut self, expansion: f32) {
         self.cycle = self.cycle.wrapping_add(1);
         self.length_clocked = false;
         self.frame_cycle += 1;
-        match self.frame_cycle {
-            7457 | 22371 => self.quarter_frame(),
-            14913 => {
-                self.quarter_frame();
-                self.half_frame();
-            }
-            29828 | 29830 if !self.mode5 => {
-                if !self.inhibit_irq {
-                    self.frame_irq = true;
-                }
-            }
-            29829 if !self.mode5 => {
-                self.quarter_frame();
-                self.half_frame();
-                if !self.inhibit_irq {
-                    self.frame_irq = true;
-                }
-            }
-            37281 if self.mode5 => {
-                self.quarter_frame();
-                self.half_frame();
-            }
-            _ => {}
+        let [q1, h1, q2, irq1, h2, irq3, h5, end5] = if self.pal {
+            [8313, 16627, 24939, 33252, 33253, 33254, 41565, 41566]
+        } else {
+            [7457, 14913, 22371, 29828, 29829, 29830, 37281, 37282]
+        };
+        if self.frame_cycle == q1 || self.frame_cycle == q2 {
+            self.quarter_frame();
         }
-        if (!self.mode5 && self.frame_cycle == 29830) || (self.mode5 && self.frame_cycle == 37282) {
+        if self.frame_cycle == h1
+            || (self.mode5 && self.frame_cycle == h5)
+            || (!self.mode5 && self.frame_cycle == h2)
+        {
+            self.quarter_frame();
+            self.half_frame();
+        }
+        if !self.mode5 && self.frame_cycle >= irq1 && self.frame_cycle <= irq3 && !self.inhibit_irq
+        {
+            self.frame_irq = true;
+        }
+        if (!self.mode5 && self.frame_cycle == irq3) || (self.mode5 && self.frame_cycle == end5) {
             self.frame_cycle = 0;
         }
         if self.reset_delay > 0 {
@@ -184,13 +193,15 @@ impl Apu {
         self.triangle.tick();
         self.noise.tick();
         self.dmc.tick();
-        self.mixer.tick(mix(
-            self.pulse1.output(),
-            self.pulse2.output(),
-            self.triangle.output(),
-            self.noise.output(),
-            self.dmc.output,
-        ));
+        self.mixer.tick(
+            mix(
+                self.pulse1.output(),
+                self.pulse2.output(),
+                self.triangle.output(),
+                self.noise.output(),
+                self.dmc.output,
+            ) + expansion,
+        );
     }
 }
 
@@ -198,3 +209,5 @@ impl Apu {
 mod rom_tests;
 #[cfg(test)]
 mod tests;
+
+state_fields!(Apu, pulse1,pulse2,triangle,noise,dmc,cycle,frame_cycle,mode5,next_mode5,inhibit_irq,frame_irq,reset_delay,length_clocked;|s: &Apu| s.frame_cycle<(if s.pal {if s.mode5 {41566}else{33254}}else if s.mode5 {37282}else{29830}) && s.reset_delay<=4);

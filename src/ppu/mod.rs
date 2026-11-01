@@ -41,6 +41,7 @@ impl CycleResult {
 }
 
 pub struct Ppu {
+    region: ::region::Region,
     ctrl: u8,
     mask: u8,
     status: u8,
@@ -74,12 +75,15 @@ impl Ppu {
         ppu
     }
 
+    pub fn set_region(&mut self, region: ::region::Region) { self.region = region; }
+
     pub fn new() -> Ppu {
         Ppu::with_mirroring(Mirroring::Horizontal)
     }
 
     pub fn with_mirroring(mirroring: Mirroring) -> Ppu {
         Ppu {
+            region: ::region::Region::Ntsc,
             ctrl: 0,
             mask: 0,
             status: 0,
@@ -217,7 +221,7 @@ impl Ppu {
     }
 
     fn render_scanline(&self) -> bool {
-        self.scanline == -1 || self.scanline == 261 || (self.scanline >= 0 && self.scanline < 240)
+        self.scanline == -1 || self.scanline == self.region.scanlines()-1 || (self.scanline >= 0 && self.scanline < 240)
     }
 
     fn incr_vram_addr(&mut self) {
@@ -248,15 +252,15 @@ impl Ppu {
             if self.cycle == 257 {
                 self.vram_addr = (self.vram_addr & !0x041f) | (self.tmp_vram_addr & 0x041f);
             }
-            if (self.scanline == -1 || self.scanline == 261) && self.cycle >= 280 && self.cycle <= 304 {
+            if (self.scanline == -1 || self.scanline == self.region.scanlines()-1) && self.cycle >= 280 && self.cycle <= 304 {
                 self.vram_addr = (self.vram_addr & !0x7be0) | (self.tmp_vram_addr & 0x7be0);
             }
         }
 
-        if (self.scanline == -1 || self.scanline == 261) && self.cycle == 1 {
+        if (self.scanline == -1 || self.scanline == self.region.scanlines()-1) && self.cycle == 1 {
             self.set_vblank(false);
             self.status &= !(STATUS_SPRITE_ZERO_HIT | STATUS_SPRITE_OVERFLOW);
-        } else if self.scanline == 241 && self.cycle == 1 {
+        } else if self.scanline == self.region.vblank_line() && self.cycle == 1 {
             self.set_vblank(true);
         }
 
@@ -442,7 +446,7 @@ impl Ppu {
         let mut end_frame = false;
 
         // Odd rendered NTSC frames omit the last pre-render dot.
-        if self.scanline == 261 && self.cycle == 339 && self.odd_frame && self.rendering_enabled() {
+        if self.region == ::region::Region::Ntsc && self.scanline == self.region.scanlines()-1 && self.cycle == 339 && self.odd_frame && self.rendering_enabled() {
             self.cycle = 0;
             self.scanline = 0;
             self.odd_frame = false;
@@ -454,7 +458,7 @@ impl Ppu {
             self.cycle = 0;
             self.scanline += 1;
 
-            if self.scanline > 261 {
+            if self.scanline >= self.region.scanlines() {
                 self.scanline = 0;
                 self.odd_frame = !self.odd_frame;
                 end_frame = true;
@@ -579,3 +583,5 @@ mod tests {
 
 #[cfg(test)]
 mod regression_tests;
+
+state_fields!(Ppu, ctrl,mask,status,spr_ram_addr,scroll,vram_addr,tmp_vram_addr,write_flag,vram,spr_ram,sprites,screen,name_table_byte,attribute_table_byte,low_bg_tile_byte,high_bg_tile_byte,tile_data,buffered_read,cycle,scanline,odd_frame,nmi_output,nmi_pending,io_latch;|s: &Ppu| s.cycle<=340 && s.scanline>=-1 && s.scanline<s.region.scanlines() && s.scroll<8 && s.vram_addr<0x8000 && s.tmp_vram_addr<0x8000);

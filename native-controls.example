@@ -1,0 +1,26 @@
+# Run: nes-rs game.nes --controls native-controls.example
+# Keyboard names: A-Z, Up/Down/Left/Right, Enter, Space, Tab,
+# LeftShift/RightShift, LeftCtrl/RightCtrl.
+# F5/F8 are reserved for state save/load; Escape pauses.
+P1.A=Z
+P1.B=X
+P1.Select=RightShift
+P1.Start=Enter
+P1.Up=Up
+P1.Down=Down
+P1.Left=Left
+P1.Right=Right
+P2.A=G
+P2.B=F
+P2.Select=R
+P2.Start=T
+P2.Up=W
+P2.Down=S
+P2.Left=A
+P2.Right=D
+# SDL controller names: a, b, x, y, back, start, leftshoulder,
+# rightshoulder, leftstick, rightstick, dpup, dpdown, dpleft, dpright.
+P1.APad=a
+P1.BPad=b
+P2.APad=a
+P2.BPad=b

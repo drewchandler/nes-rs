@@ -75,8 +75,11 @@ pub(super) struct Mixer {
 
 impl Mixer {
     pub fn new() -> Mixer {
+        Self::with_rate(CPU_HZ)
+    }
+    pub fn with_rate(cpu_hz: f64) -> Mixer {
         let mut blip = BlipBuf::new(2048);
-        blip.set_rates(CPU_HZ, SAMPLE_RATE as f64);
+        blip.set_rates(cpu_hz, SAMPLE_RATE as f64);
         Mixer {
             blip,
             clock: 0,
