@@ -203,6 +203,19 @@ impl Ppu {
         }
     }
 
+    pub(super) fn sprite_fetch_address(&self) -> Option<u16> {
+        match (self.cycle - 256) % 8 {
+            0 | 2 => Some(0x2000 | (self.vram_addr & 0x0fff)),
+            4 | 6 => {
+                let base = ((self.cycle - 256) / 8) as usize * 4;
+                Some(self.sprite_pattern_addr(self.sprites.secondary[base + 1],
+                    self.sprites.secondary[base + 2], self.sprites.secondary[base]) +
+                    if self.cycle % 8 == 6 { 8 } else { 0 })
+            }
+            _ => None,
+        }
+    }
+
     fn fetch_sprite_dot(&mut self) {
         self.spr_ram_addr = 0;
         let slot = ((self.cycle - 257) / 8) as usize;

@@ -78,9 +78,10 @@ the tests. The APU runs alongside the PPU; these tests do not open an audio devi
 
 ## Limits
 
-The application supports NROM (mapper 0) with CHR-ROM or CHR RAM and UxROM
-(mapper 2) with CHR RAM. CPU bus accesses advance the APU
-once and the PPU three dots, including reset, interrupt, and DMA cycles. Passing
+The application shares [cartridge mapping](mappers.md) between CPU and PPU,
+including banked CHR memory, dynamic mirroring, and MMC3 A12 IRQs. CPU bus
+accesses advance the APU once and the PPU three dots, including reset,
+interrupt, and DMA cycles. Passing
 these sprite timing ROMs is not a claim of universal CPU/PPU race or half-cycle
 bus accuracy. See [audio and shared timing](audio.md) for the clock integration.
 
@@ -88,5 +89,5 @@ Rendering-time OAMDATA bus values, OAM corruption, nonzero-OAMADDR evaluation
 quirks, and OAM writes during rendering are not modeled fully. Evaluation
 stops once overflow is latched because further reads cannot change the selected
 sprites or the flag; those remaining internal bus reads are not exposed.
-PAL timing, mapper IRQs, and analog composite color behavior remain outside
+PAL timing and analog composite color behavior remain outside
 this renderer's scope.

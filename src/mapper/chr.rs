@@ -1,25 +1,30 @@
-// Fixed 8 KiB pattern memory used by NROM and UxROM.
+// Cartridge pattern memory. Bank controllers translate PPU addresses first.
 pub struct ChrMemory {
     data: Vec<u8>,
     writable: bool,
 }
 
 impl ChrMemory {
-    pub fn new(mut banks: Vec<Vec<u8>>) -> ChrMemory {
-        assert!(banks.len() <= 1, "Expected at most 8 KiB CHR ROM");
+    pub fn new(banks: Vec<Vec<u8>>) -> ChrMemory {
+        ChrMemory::with_ram(banks, 8192)
+    }
+
+    pub fn with_ram(banks: Vec<Vec<u8>>, ram_size: usize) -> ChrMemory {
         let writable = banks.is_empty();
-        let data = if writable { vec![0; 8192] } else { banks.remove(0) };
-        assert_eq!(data.len(), 8192);
+        let data = if writable { vec![0; ram_size] } else {
+            banks.into_iter().flat_map(|bank| bank.into_iter()).collect()
+        };
+        assert!(!data.is_empty(), "Cartridge needs CHR ROM or RAM");
         ChrMemory { data, writable }
     }
 
-    pub fn read(&self, addr: u16) -> u8 {
-        self.data[(addr & 0x1fff) as usize]
-    }
+    pub fn is_ram(&self) -> bool { self.writable }
 
-    pub fn write(&mut self, addr: u16, value: u8) {
+    pub fn read(&self, addr: usize) -> u8 { self.data[addr % self.data.len()] }
+    pub fn write(&mut self, addr: usize, value: u8) {
         if self.writable {
-            self.data[(addr & 0x1fff) as usize] = value;
+            let index = addr % self.data.len();
+            self.data[index] = value;
         }
     }
 }

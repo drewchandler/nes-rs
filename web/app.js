@@ -10,7 +10,7 @@ class BrowserEmulator {
     new Uint8Array(wasm.memory.buffer, pointer, bytes.length).set(bytes);
     const result = wasm.load_rom();
     if (result) throw new Error(result === 1 ? 'Invalid or truncated iNES ROM.' :
-      'Unsupported cartridge. Choose NROM (mapper 0) or UxROM (mapper 2) in iNES or NES 2.0 format.');
+      'Unsupported mapper, board variant, or memory layout. See the supported cartridge list below.');
   }
   frame(buttons) {
     const pointer = wasm.frame(buttons);

@@ -20,8 +20,8 @@ impl Unrom {
 }
 
 impl Mapper for Unrom {
-    fn read_chr(&self, addr: u16) -> u8 { self.chr.read(addr) }
-    fn write_chr(&mut self, addr: u16, value: u8) { self.chr.write(addr, value); }
+    fn read_chr(&self, addr: u16) -> Option<u8> { Some(self.chr.read(addr as usize)) }
+    fn write_chr(&mut self, addr: u16, value: u8) { self.chr.write(addr as usize, value); }
 
     fn read(&self, addr: u16) -> u8 {
         let prg_rom = &self.rom.prg_rom;

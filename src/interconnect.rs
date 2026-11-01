@@ -1,7 +1,5 @@
 use joypad::Joypad;
-use mapper::{Cartridge, Mapper};
-use mapper::nrom::Nrom;
-use mapper::unrom::Unrom;
+use mapper::{self, Cartridge};
 use ppu::Ppu;
 use rom::Rom;
 use apu::Apu;
@@ -55,6 +53,7 @@ enum MappedAddress {
     Joypad1,
     Joypad2,
     PrgRom,
+    CartridgeLow,
     OpenBus,
 }
 
@@ -62,6 +61,7 @@ fn map_addr(addr: u16) -> MappedAddress {
     match addr {
         0x0000...0x1fff => MappedAddress::Ram(addr as usize % 2048),
         0x8000...0xffff => MappedAddress::PrgRom,
+        0x4020..=0x7fff => MappedAddress::CartridgeLow,
         0x2000...0x3fff => {
             match (addr - 0x2000) % 8 {
                 0 => MappedAddress::PpuControlRegister,
@@ -87,11 +87,7 @@ fn map_addr(addr: u16) -> MappedAddress {
 impl MemoryMappingInterconnect {
     pub fn new(rom: Rom) -> MemoryMappingInterconnect {
         let mirroring = rom.mirroring;
-        let mapper: Box<dyn Mapper> = match rom.mapper {
-            0 => Box::new(Nrom::new(rom)),
-            2 => Box::new(Unrom::new(rom)),
-            _ => panic!("Unimplemented mapper"),
-        };
+        let mapper = mapper::create(rom);
         let mapper = Rc::new(RefCell::new(mapper));
         let ppu = Ppu::with_cartridge(mirroring, mapper.clone());
 
@@ -113,7 +109,7 @@ impl MemoryMappingInterconnect {
     fn clock_cpu(&mut self) {
         // IRQ is polled before the instruction's final cycle. Preserve the
         // line at the end of the preceding cycle, even if $4015 clears it.
-        self.irq_sample = self.apu.irq();
+        self.irq_sample = self.apu.irq() || self.mapper.borrow().irq();
         self.cpu_cycles = self.cpu_cycles.wrapping_add(1);
         self.apu.step();
         for _ in 0..3 {
@@ -156,6 +152,7 @@ impl Interconnect for MemoryMappingInterconnect {
         let value = match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr],
             MappedAddress::PrgRom => self.mapper.borrow().read(addr),
+            MappedAddress::CartridgeLow => self.mapper.borrow().read_low(addr).unwrap_or(self.open_bus),
             MappedAddress::PpuControlRegister |
             MappedAddress::PpuMaskRegister |
             MappedAddress::PpuStatusRegister |
@@ -180,6 +177,7 @@ impl Interconnect for MemoryMappingInterconnect {
         match map_addr(addr) {
             MappedAddress::Ram(addr) => self.ram[addr] = value,
             MappedAddress::PrgRom => self.mapper.borrow_mut().write(addr, value),
+            MappedAddress::CartridgeLow => self.mapper.borrow_mut().write_low(addr, value),
             MappedAddress::PpuControlRegister |
             MappedAddress::PpuMaskRegister |
             MappedAddress::PpuStatusRegister |
@@ -219,7 +217,10 @@ impl Interconnect for MemoryMappingInterconnect {
 
     fn cpu_write(&mut self, addr: u16, value: u8) {
         self.clock_cpu();
-        self.write_word(addr, value);
+        if addr >= 0x8000 {
+            self.open_bus = value;
+            self.mapper.borrow_mut().write_cpu(addr, value, self.cpu_cycles);
+        } else { self.write_word(addr, value); }
     }
 
     fn oam_dma_read(&mut self, addr: u16) -> u8 {

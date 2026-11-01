@@ -186,6 +186,7 @@ impl Ppu {
         if self.write_flag {
             self.tmp_vram_addr = self.tmp_vram_addr & 0xff00 | value as u16;
             self.vram_addr = self.tmp_vram_addr;
+            if !self.rendering_enabled() || !self.render_scanline() { self.vram.address(self.vram_addr); }
         } else {
             self.tmp_vram_addr = (self.tmp_vram_addr & 0x00ff) | ((value as u16) & 0x3F) << 8;
         }
@@ -225,10 +226,12 @@ impl Ppu {
             self.increment_y();
         } else {
             self.vram_addr = self.vram_addr.wrapping_add(self.addr_increment()) & 0x7fff;
+            self.vram.address(self.vram_addr);
         }
     }
 
     pub fn step(&mut self) -> CycleResult {
+        self.vram.clock();
         self.finish_sprite_pixel();
         if self.scanline >= 0 && self.scanline < 240 {
             // Forced blanking still outputs a color; fetch/scroll enable and
@@ -236,6 +239,7 @@ impl Ppu {
             self.process_render_scanline();
         }
         if self.rendering_enabled() && self.render_scanline() {
+            self.drive_fetch_address();
             self.step_sprites();
             self.process_fetch_scanline();
             if self.cycle == 256 {
@@ -317,9 +321,34 @@ impl Ppu {
             self.palette_color(self.vram.read(addr));
     }
 
+    // The cartridge sees the address pins before the fetch latches its byte.
+    // Keep that phase visible: MMC3 clocks on A12, not on the completed read.
+    fn drive_fetch_address(&self) {
+        let addr = match self.cycle {
+            // The idle dot briefly exposes the upcoming pattern address.
+            // Without this pulse, MMC3 sees a second qualified rise per line
+            // when the background uses $1000 and sprites use $0000.
+            0 if self.scanline >= 0 && self.scanline < 240 => Some(self.background_pattern_table() + self.name_table_byte as u16 * 16 +
+                ((self.vram_addr >> 12) & 7)),
+            1...255 | 320...335 => match self.cycle % 8 {
+                0 => Some(0x2000 | (self.vram_addr & 0x0fff)),
+                2 => Some(0x23c0 | (self.vram_addr & 0x0c00) |
+                    ((self.vram_addr >> 4) & 0x38) | ((self.vram_addr >> 2) & 7)),
+                4 | 6 => Some(self.background_pattern_table() + self.name_table_byte as u16 * 16 +
+                    ((self.vram_addr >> 12) & 7) + if self.cycle % 8 == 6 { 8 } else { 0 }),
+                _ => None,
+            },
+            256...319 => self.sprite_fetch_address(),
+            336 | 338 => Some(0x2000 | (self.vram_addr & 0x0fff)),
+            _ => None,
+        };
+        if let Some(addr) = addr { self.vram.address(addr); }
+    }
+
     fn process_fetch_scanline(&mut self) {
         match self.cycle {
             1...256 | 321...336 => self.fetch_bg_data(),
+            337 | 339 => { self.vram.read(0x2000 | (self.vram_addr & 0x0fff)); }
             320 => {}
             _ => {}
         }
