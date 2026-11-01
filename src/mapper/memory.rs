@@ -8,6 +8,8 @@ pub struct Memory {
     pub mirroring: Mirroring,
     pub submapper: u8,
     pub nes2: bool,
+    prg_nvram: usize,
+    chr_nvram: usize,
 }
 
 impl Memory {
@@ -19,9 +21,25 @@ impl Memory {
             mirroring: rom.mirroring,
             submapper: rom.submapper,
             nes2: rom.nes2,
+            prg_nvram: rom.prg_nvram_size, chr_nvram: rom.chr_nvram_size,
         }
     }
 
+    pub fn battery(&self) -> Vec<u8> {
+        let mut data = self.ram[self.ram.len()-self.prg_nvram..].to_vec();
+        if self.chr_nvram != 0 { data.extend_from_slice(&self.chr.bytes()[self.chr.bytes().len()-self.chr_nvram..]); }
+        data
+    }
+    pub fn load_battery(&mut self, bytes: &[u8]) -> ::state::Result<()> {
+        if bytes.len() != self.prg_nvram + self.chr_nvram { return Err("Save file size does not match this cartridge".into()); }
+        let start = self.ram.len()-self.prg_nvram;
+        self.ram[start..].copy_from_slice(&bytes[..self.prg_nvram]);
+        if self.chr_nvram != 0 {
+            let start = self.chr.bytes().len()-self.chr_nvram;
+            self.chr.bytes_mut()[start..].copy_from_slice(&bytes[self.prg_nvram..]);
+        }
+        Ok(())
+    }
     pub fn prg(&self, addr: u16, size: usize, bank: usize) -> u8 {
         self.prg[(bank * size + addr as usize % size) % self.prg.len()]
     }
@@ -39,3 +57,5 @@ impl Memory {
         }
     }
 }
+
+state_fields!(Memory, ram,chr);

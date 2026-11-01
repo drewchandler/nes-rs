@@ -1,7 +1,7 @@
 # Cartridge support
 
 Desktop and WebAssembly builds use the same cartridge factory and CPU/PPU
-memory. There are 28 supported mapper IDs. An ID identifies a family of boards;
+memory. There are 31 supported mapper IDs. An ID identifies a family of boards;
 the submapper and memory sizes must also match a profile below. Unsupported
 profiles are rejected instead of guessing a different board's wiring.
 
@@ -15,7 +15,7 @@ default but reject NES 2.0 headers that explicitly request it.
 
 | ID | Board | PRG ROM | Graphics memory / variants |
 | --- | --- | --- | --- |
-| 0 | NROM | 16–32 | 8 CHR-ROM or RAM; submapper 0 |
+| 0 | NROM | 16–32 | 8 CHR-ROM or RAM; optional PRG RAM; submapper 0 |
 | 1 | MMC1 / SxROM | 16–512 | Up to 128 CHR-ROM or 8 RAM; submapper 0; submapper 5 fixes 32 PRG |
 | 2 | UxROM | 16–2048 | 8 CHR RAM; submappers 0/1/2 |
 | 3 | CNROM | 16–32 | Up to 32 CHR-ROM; optional PRG RAM; submappers 0/1/2 |
@@ -25,10 +25,12 @@ default but reject NES 2.0 headers that explicitly request it.
 | 10 | MMC4 / FxROM | 32–256 | Up to 128 CHR-ROM, pattern-read latches; optional PRG RAM |
 | 11 | Color Dreams | 32–128 | Up to 128 CHR-ROM; submappers 0/1/2 |
 | 13 | CPROM | 32 | 16 CHR RAM, fixed lower 4 / switchable upper 4, vertical mirroring |
+| 24 / 26 | Konami VRC6a / VRC6b | 32–256 | Up to 256 CHR-ROM or 8 RAM; PRG RAM enable, CPU/scanline IRQs, two pulses + saw audio |
 | 32 | Irem G-101 | 32–256 | Up to 256 CHR-ROM or 8 RAM; optional PRG RAM; submapper 1 fixes one-screen upper |
 | 34 | BNROM / NINA-001 | 32–128 BNROM; 32–64 NINA | BNROM: 8 CHR RAM; NINA-001: up to 64 CHR-ROM and optional PRG RAM |
 | 38 | Bit Corp | 32–128 | Up to 32 CHR-ROM; registers at $7000–$7FFF |
 | 66 | GxROM | 32–128 | Up to 32 CHR-ROM |
+| 69 | Sunsoft FME-7 / 5B | 32–512 | Up to 256 CHR-ROM or 8 RAM; low PRG ROM/RAM window, CPU IRQ, three tones with shared noise/envelope |
 | 70 | Bandai 74161/7432 | 32–128 | Up to 128 CHR-ROM, header mirroring |
 | 71 | Camerica | 32–256 | 8 CHR RAM; submapper 1 adds Fire Hawk one-screen control |
 | 75 | Konami VRC1 | 32–128 | Up to 128 CHR-ROM, independent 4 KiB banks |
@@ -90,17 +92,26 @@ MMC3-derived boards are rejected.
 
 ## Save RAM and format limits
 
-PRG RAM and battery-backed PRG NVRAM are allocated for the current cartridge,
-including MMC1 banks and MMC6's small RAM. Saves are not persisted to disk,
-browser storage, or a file: restarting/replacing a cartridge clears them.
-NES 2.0 volatile and nonvolatile RAM sizes share this session-only storage.
+Battery-backed PRG/CHR NVRAM persists through desktop `.sav` files or browser
+storage. Volatile RAM remains temporary. Save states restore controller, mapper,
+memory, and IRQ state as well as the CPU/PPU/APU. See [saves and controls](saves.md).
+
+VRC6 supports both address-line arrangements, all four CHR banking modes,
+CIRAM bank selection, CHR-ROM nametables, PRG RAM enable, CPU/scanline IRQ modes,
+and its pulse/saw sound channels. The unused 512 KiB CHR board wiring is not
+implemented. FME-7 handles the $6000 ROM/RAM window and 16-bit decrementing IRQ;
+5B audio adds three tone channels, shared noise, and the 32-step envelope.
+Relative expansion-audio mixing gains approximate the cartridge analog circuits.
 
 The parser accepts basic iNES / NES 2.0 with ordinary bank counts; NES 2.0
 extended/exponent ROM sizes and mixed CHR-ROM/CHR RAM are not supported.
-The browser additionally rejects non-NTSC-compatible timing and alternate
-consoles. No expansion audio is implemented. Trainers are skipped rather than
-installed into PRG RAM. Mapper support does not imply every game or every
-CPU/PPU half-cycle race has been verified.
+NTSC, PAL, and Dendy select their CPU/PPU ratio, scanline/vblank timing, audio
+sample rate conversion, and APU period tables. PAL uses 2A07 frame timing;
+Dendy uses NTSC APU sequences at its own CPU clock. Both frontends offer a
+region override. Alternate consoles, MMC5, VRC7/FM, Namco 163, disk-system
+hardware, and other unlisted boards remain unsupported. Trainers are skipped.
+Passing tests does not establish universal CPU/PPU half-cycle accuracy; PAL
+OAM refresh/corruption and other rendering-time bus quirks remain approximate.
 
 ## Validation
 
@@ -108,8 +119,9 @@ The default native suite covers bank signatures for every controller, separate
 low-address decoders, bus conflicts, dynamic mirroring through real CPU PPU
 ports, serial-write timing, latch-triggering reads, PRG RAM protection/banking,
 and PPU-driven IRQ delivery. The existing Wasm smoke test boots synthetic ROMs
-for all 28 IDs plus NINA-001 and MMC6, and checks CPU-driven CNROM banked
-rendering. No commercial ROMs are bundled or needed by CI.
+for all 31 IDs plus NINA-001 and MMC6, and checks CPU-driven CNROM banked
+rendering. Two separately licensed homebrew demos are bundled and checked by the static
+build. Commercial ROMs are not included.
 
 Six optional MMC3 conformance ROMs from Shay Green pass, including exact
 scanline timing for both background/sprite pattern-table configurations and
@@ -127,8 +139,19 @@ NES_TEST_ROMS=/tmp/nes-test-roms cargo test --release --locked \
 The runner requires the $6001–$6003 signature and a completed $6000 result,
 fails on timeout, and selects each ROM's expected controller revision. This
 checks the six `mmc3_test_2/rom_singles` files, not an entire library of games.
+VRC6/FME-7 register, IRQ, waveform, envelope, and snapshot tests are included
+in the default suite. Wasm tests measure their synthesized 440 Hz tones through
+the real CPU and audio path. Ten optional PAL APU test ROMs also pass; see
+[audio](audio.md) for their command.
+
 Board register and variant definitions follow [NESdev's mapper documentation](https://www.nesdev.org/wiki/Mapper),
 [MMC1](https://www.nesdev.org/wiki/MMC1),
 [MMC3](https://www.nesdev.org/wiki/MMC3),
 [MMC6](https://www.nesdev.org/wiki/MMC6), and
 [NES 2.0 submappers](https://www.nesdev.org/wiki/NES_2.0_submappers).
+
+Expansion registers and sound follow [VRC6](https://www.nesdev.org/wiki/VRC6),
+[VRC IRQ](https://www.nesdev.org/wiki/VRC_IRQ),
+[VRC6 audio](https://www.nesdev.org/wiki/VRC6_audio),
+[Sunsoft FME-7](https://www.nesdev.org/wiki/Sunsoft_FME-7), and
+[Sunsoft 5B audio](https://www.nesdev.org/wiki/Sunsoft_5B_audio).

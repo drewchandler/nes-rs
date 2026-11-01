@@ -417,7 +417,7 @@ fn mapped_bus(program: &[u8]) -> ::interconnect::MemoryMappingInterconnect {
     prg[..program.len()].copy_from_slice(program);
     prg[0x3ffc] = 0;
     prg[0x3ffd] = 0xc0;
-    ::interconnect::MemoryMappingInterconnect::new(::rom::Rom {
+    ::interconnect::MemoryMappingInterconnect::new(::rom::Rom { prg_nvram_size: 0, chr_nvram_size: 0, region: ::region::Region::Ntsc,
         mapper: 2, submapper: 0, prg_ram_size: 0, chr_ram_size: 8192, nes2: false, prg_rom: vec![prg], chr_rom: vec![],
         mirroring: ::rom::Mirroring::Horizontal,
     })

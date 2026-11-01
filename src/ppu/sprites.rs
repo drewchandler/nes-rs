@@ -257,3 +257,7 @@ mod tests;
 
 #[cfg(test)]
 mod rom_tests;
+
+state_fields!(Sprite, x,attributes,low,high,zero);
+
+state_fields!(SpritePipeline, secondary,indices,count,primary_index,byte_index,latch,done,active,active_count,pattern_addr,hit_pending;|s: &SpritePipeline| s.count<=8 && s.primary_index<=64 && s.byte_index<4 && s.active_count<=8);
