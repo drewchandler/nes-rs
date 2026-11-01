@@ -17,18 +17,16 @@ index.html directly. The build needs no Node packages or JavaScript binding tool
 All paths are relative, so the site also works under a GitHub Pages repository path.
 
 Choose a local `.nes` ROM to start. ROM bytes stay in the browser and are never
-uploaded. Both desktop and browser builds support these cartridge layouts:
+uploaded. Desktop and browser builds share support for 28 mapper IDs, including
+NROM, UxROM, CNROM, AxROM, MMC1, MMC2/MMC4, MMC3/MMC6, and common discrete
+boards. See [supported cartridges](docs/mappers.md) for IDs, memory layouts,
+submapper variants, and validation.
 
-| Mapper | Program ROM | Graphics memory |
-| --- | --- | --- |
-| NROM (0) | Fixed 16 or 32 KiB | 8 KiB CHR-ROM or CHR RAM |
-| UxROM (2) | Switchable 16 KiB banks plus a fixed final bank | 8 KiB CHR RAM |
-
-Legacy iNES and NES 2.0 headers are accepted. NES 2.0 cartridges must use
-NTSC-compatible timing, no PRG RAM/NVRAM, submapper 0 for NROM or 0/1/2 for
-UxROM, and the memory layouts above. Extended ROM sizes and other layouts
-show an error. CHR-ROM stays read-only; games using CHR RAM can write patterns
-through the PPU ports. Cartridge PRG RAM/save RAM is not implemented.
+Legacy iNES and NES 2.0 headers are accepted. NES 2.0 timing must be
+NTSC-compatible; extended ROM sizes and unimplemented board layouts are
+rejected. CHR-ROM is read-only, CHR RAM is writable, and supported boards
+provide banked PRG RAM with their enable/protection controls. Save RAM currently
+lasts only for the running cartridge: reloading or choosing another ROM clears it.
 
 Controls match the desktop app: arrows to move, Z for A, X for B,
 Right Shift for Select, and Enter for Start. The page has pause and mute controls,
@@ -71,7 +69,7 @@ CI runs on pull requests, pushes to `master`, and manual dispatch. It builds
 and tests the native targets on Linux and independently builds the browser site.
 A Node smoke test loads the compiled Wasm module and checks cartridge validation,
 video, audio, controller input, and replacing a running cartridge using a synthetic
-ROM; no external ROM is required. CI never publishes a release or deploys Pages.
+ROMs across all supported mapper IDs; no external ROM is required. CI never publishes a release or deploys Pages.
 
 Legacy formatting and compiler warnings are not release blockers in this workflow.
 The current codebase predates modern Rust formatting and lint conventions; those

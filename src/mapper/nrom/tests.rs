@@ -9,7 +9,8 @@ fn cartridge(banks: usize, chr_rom: Vec<Vec<u8>>, mirroring: Mirroring) -> Rom {
         .map(|bank| vec![0x11 * (bank as u8 + 1); 16384]).collect();
     prg_rom[0][..3].copy_from_slice(&[0x4c, 0, 0x80]); // JMP $8000.
     prg_rom[banks - 1][0x3ffc..0x3ffe].copy_from_slice(&[0, 0x80]);
-    Rom { prg_rom, chr_rom, mapper: 0, submapper: 0, mirroring }
+    let chr_ram_size = if chr_rom.is_empty() { 8192 } else { 0 };
+    Rom { prg_rom, chr_rom, mapper: 0, submapper: 0, mirroring, prg_ram_size: 0, chr_ram_size, nes2: false }
 }
 
 fn set_ppu_addr(bus: &mut MemoryMappingInterconnect, addr: u16) {

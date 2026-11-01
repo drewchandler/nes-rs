@@ -15,7 +15,7 @@
 </style>
 <main>
 <h1>NES in your browser</h1>
-<p>Choose an NROM (mapper 0) or UxROM (mapper 2) ROM in iNES or NES 2.0 format. Your ROM stays on your device.</p>
+<p>Choose a .nes ROM in iNES or NES 2.0 format. Supports NROM, UxROM, MMC1, MMC3, and more. Your ROM stays on your device.</p>
 <label for="rom">ROM file</label>
 <input id="rom" type="file" accept=".nes,application/octet-stream" disabled>
 <button id="pause" disabled>Pause</button>
@@ -23,7 +23,9 @@
 <p id="status" role="status">Loading emulator…</p>
 <canvas id="screen" width="256" height="240" aria-label="NES game screen"></canvas>
 <p>Arrow keys: move · Z: A · X: B · Right Shift: Select · Enter: Start<br>
-Choose another ROM to restart. Emulation pauses when you leave this tab.</p>
+Choose another ROM to restart. Emulation pauses when you leave this tab.<br>
+Save data lasts until you reload or choose another ROM.
+<a href="https://github.com/drewchandler/nes-rs/blob/master/docs/mappers.md">Supported cartridges</a></p>
 </main>
 <script type="module" src="./app.js"></script>
 </html>

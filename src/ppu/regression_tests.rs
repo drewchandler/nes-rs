@@ -681,6 +681,8 @@ fn scrolled_multiframe_rasters_match_independent_reference() {
                                 Mirroring::Horizontal => table / 2,
                                 Mirroring::Vertical => table % 2,
                                 Mirroring::FourScreen => table,
+                                Mirroring::SingleLower => 0,
+                                Mirroring::SingleUpper => 1,
                             };
                             let tile_x = (world_x % 256) / 8;
                             let tile_y = (world_y % 240) / 8;

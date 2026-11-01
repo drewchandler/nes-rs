@@ -478,7 +478,7 @@ fn real_cpu_dma_and_ppu_clock_render_a_sprite() {
     let rom = Rom {
         prg_rom: vec![prg],
         chr_rom: vec![],
-        mapper: 2, submapper: 0,
+        mapper: 2, submapper: 0, prg_ram_size: 0, chr_ram_size: 8192, nes2: false,
         mirroring: Mirroring::Horizontal,
     };
     let mut bus = MemoryMappingInterconnect::new(rom);

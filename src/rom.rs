@@ -7,6 +7,8 @@ pub enum Mirroring {
     Horizontal,
     Vertical,
     FourScreen,
+    SingleLower,
+    SingleUpper,
 }
 
 pub struct Rom {
@@ -15,6 +17,9 @@ pub struct Rom {
     pub mapper: u16,
     pub submapper: u8,
     pub mirroring: Mirroring,
+    pub prg_ram_size: usize,
+    pub chr_ram_size: usize,
+    pub nes2: bool,
 }
 
 impl Rom {
@@ -61,11 +66,21 @@ impl Rom {
             })
             .collect::<io::Result<Vec<Vec<u8>>>>()?;
 
+        let mapper = (header[7] & 0xf0) as u16 | (header[6] >> 4) as u16 |
+            if nes2 { ((header[8] & 0x0f) as u16) << 8 } else { 0 };
+        let ram_size = |shift: u8| if shift == 0 { 0 } else { 64usize << shift };
+        let prg_ram_size = if nes2 {
+            ram_size(header[10] & 15) + ram_size(header[10] >> 4)
+        } else { header[8].max(1) as usize * 8192 };
+        let chr_ram_size = if nes2 {
+            ram_size(header[11] & 15) + ram_size(header[11] >> 4)
+        } else if header[5] != 0 { 0 } else if mapper == 13 { 16384 } else { 8192 };
+
         Ok(Rom {
             prg_rom: prg_rom,
             chr_rom: chr_rom,
-            mapper: (header[7] & 0xf0) as u16 | (header[6] >> 4) as u16 |
-                if nes2 { ((header[8] & 0x0f) as u16) << 8 } else { 0 },
+            mapper,
+            prg_ram_size, chr_ram_size, nes2,
             submapper: if nes2 { header[8] >> 4 } else { 0 },
             mirroring: if header[6] & 0x08 != 0 {
                 Mirroring::FourScreen
@@ -82,6 +97,24 @@ impl Rom {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn ram_sizes_distinguish_legacy_defaults_and_nes2_volatile_and_battery_memory() {
+        let mut bytes = vec![0; 16 + 32768];
+        bytes[..5].copy_from_slice(b"NES\x1a\x02");
+        let legacy = Rom::read(&mut Cursor::new(&bytes)).unwrap();
+        assert_eq!((legacy.prg_ram_size, legacy.chr_ram_size), (8192, 8192));
+        bytes[6] = 0xd0; // CPROM's 16 KiB CHR RAM is implicit in legacy files.
+        assert_eq!(Rom::read(&mut Cursor::new(&bytes)).unwrap().chr_ram_size, 16384);
+        bytes[6] = 0x10; bytes[7] = 8;
+        bytes[10] = 0x77; bytes[11] = 7;
+        let nes2 = Rom::read(&mut Cursor::new(&bytes)).unwrap();
+        assert!(nes2.nes2);
+        assert_eq!((nes2.prg_ram_size, nes2.chr_ram_size), (16384, 8192));
+        bytes[10] = 0; bytes[11] = 0;
+        let absent = Rom::read(&mut Cursor::new(bytes)).unwrap();
+        assert_eq!((absent.prg_ram_size, absent.chr_ram_size), (0, 0));
+    }
 
     #[test]
     fn ines_mirroring_flags_reach_the_mapped_ppu() {

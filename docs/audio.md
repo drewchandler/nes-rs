@@ -58,7 +58,7 @@ DMA all use these methods. Raw `read_word`/`write_word` accesses support setup
 and inspection without advancing time. `Nes::run_frame` waits for the PPU's
 frame boundary; callers must not advance the PPU again after `Cpu::step`.
 
-APU frame/DMC IRQs feed CPU interrupt polling. CLI, SEI, and PLP use the prior
+APU frame/DMC IRQs and cartridge IRQs feed CPU interrupt polling. CLI, SEI, and PLP use the prior
 I flag; RTI uses the restored flag. NMI takes priority over a sampled IRQ.
 DMC halts CPU reads, waits through CPU writes, and takes three/four cycles
 depending on alignment. During sprite DMA, a DMC get replaces an OAM get and
@@ -120,10 +120,10 @@ speaker in the cloud environment.
 
 ## Limits
 
-The application targets NTSC, NROM (mapper 0) with CHR-ROM or CHR RAM, and
-UxROM (mapper 2) with CHR RAM. PAL/Dendy timing, expansion
-audio, additional mappers, and mapper IRQs require further work. The analog
-output/filter model is an approximation.
+The application targets NTSC and the [supported cartridge boards](mappers.md).
+MMC3 IRQs share the CPU interrupt path with the APU. PAL/Dendy timing and
+cartridge expansion audio require further work. The analog output/filter model
+is an approximation.
 
 CPU-cycle clocking does not model every half-cycle race. Rare DMC abort/start
 and DMA arbitration cases are not fully modeled; controller-read glitches and

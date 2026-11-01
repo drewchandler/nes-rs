@@ -25,20 +25,13 @@ pub extern "C" fn rom_buffer(length: usize) -> *mut u8 {
     })
 }
 
-// Accept NES 2.0 only for the memory, timing, and console configuration the
-// current NROM/UxROM core implements. Byte 8 selects the submapper behavior.
+// Mapper-specific RAM/ROM and submapper rules are shared with desktop builds.
+// Console and timing variants still need separate CPU/PPU implementations.
 fn supported_header(header: &[u8]) -> bool {
     match header[7] & 0x0c {
-        0 => true, // Preserve legacy iNES handling.
-        0x08 => header[7] & 0x03 == 0 && // Standard NES/Famicom console.
-            header[8] >> 4 <= 2 &&
-            header[9] == 0 && // Fixed-size PRG/CHR banks, no extended sizes.
-            header[10] == 0 && // No cartridge PRG RAM or NVRAM.
-            // CHR ROM uses no RAM; CHR-less cartridges need exactly 8 KiB RAM.
-            ((header[5] == 0 && header[11] == 7) ||
-             (header[5] == 1 && header[11] == 0)) &&
-            (header[12] == 0 || header[12] == 2) && // NTSC or dual-region.
-            header[13] == 0 && header[14] == 0,
+        0 => header[7] & 3 == 0,
+        0x08 => header[7] & 3 == 0 && header[9] == 0 &&
+            (header[12] == 0 || header[12] == 2) && header[13] == 0 && header[14] == 0,
         _ => false,
     }
 }
@@ -54,13 +47,7 @@ pub extern "C" fn load_rom() -> u32 {
             Ok(rom) => rom,
             Err(_) => return 1,
         };
-        let supported = match rom.mapper {
-            0 => rom.submapper == 0 && (rom.prg_rom.len() == 1 || rom.prg_rom.len() == 2) &&
-                rom.chr_rom.len() <= 1,
-            2 => rom.prg_rom.len() >= 2 && rom.chr_rom.is_empty(),
-            _ => false,
-        };
-        if !supported { return 2; }
+        if !::mapper::supported(&rom) { return 2; }
         let mut nes = Nes::new(rom);
         nes.reset();
         state.nes = Some(nes);
@@ -121,7 +108,7 @@ mod tests {
         let mut bytes = vec![0; 16 + 32768];
         bytes[..4].copy_from_slice(b"NES\x1a");
         bytes[4] = 2;
-        bytes[6] = 0x10; // MMC1 remains unsupported.
+        bytes[6] = 0x50; // MMC5 remains unsupported.
         upload(&bytes);
         assert_eq!(load_rom(), 2);
         bytes[6] = 0x20;
