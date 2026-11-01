@@ -82,7 +82,10 @@ async function loadGame(bytes, name, ticket) {
 async function chooseFile() {
   const file = picker.files[0]; picker.value = ''; if (!file) return;
   const ticket = ++loadId; status.textContent = `Loading ${file.name}…`;
-  try { await resumeAudio(); await loadGame(new Uint8Array(await file.arrayBuffer()), file.name, ticket); }
+  try {
+    if (file.size > 8 * 1024 * 1024) throw new Error('ROM must be smaller than 8 MiB.');
+    await resumeAudio(); await loadGame(new Uint8Array(await file.arrayBuffer()), file.name, ticket);
+  }
   catch (error) { if (ticket === loadId) { message(error.message); status.textContent = game ? `Playing ${game.name}` : 'Ready. Choose another ROM.'; } }
 }
 picker.addEventListener('change', chooseFile);
