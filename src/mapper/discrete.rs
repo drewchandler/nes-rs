@@ -64,6 +64,8 @@ impl Discrete {
     }
 }
 impl Mapper for Discrete {
+    fn memory(&self) -> Option<&Memory> { Some(&self.mem) }
+    fn memory_mut(&mut self) -> Option<&mut Memory> { Some(&mut self.mem) }
     fn read(&self, addr: u16) -> u8 {
         let bank32 = match self.id {
             7 => Some((self.bank & 7) as usize),
@@ -149,3 +151,5 @@ impl Mapper for Discrete {
         let offset = self.chr_addr(addr); self.mem.chr.write(offset, value);
     }
 }
+
+state_fields!(Discrete, mem,bank,outer,chr_lo,chr_hi,mirror; |s: &Discrete| s.outer<=12 && s.outer%4==0 && s.chr_lo<16 && s.chr_hi<16);

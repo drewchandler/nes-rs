@@ -475,7 +475,7 @@ fn real_cpu_dma_and_ppu_clock_render_a_sprite() {
     ]);
     prg[0x3ffc] = 0;
     prg[0x3ffd] = 0xc0;
-    let rom = Rom {
+    let rom = Rom { prg_nvram_size: 0, chr_nvram_size: 0, region: ::region::Region::Ntsc,
         prg_rom: vec![prg],
         chr_rom: vec![],
         mapper: 2, submapper: 0, prg_ram_size: 0, chr_ram_size: 8192, nes2: false,

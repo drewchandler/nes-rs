@@ -262,6 +262,7 @@ pub(super) const NOISE_PERIODS: [u16; 16] = [
 ];
 
 pub(super) struct Noise {
+    pub pal: bool,
     pub length: Length,
     pub envelope: Envelope,
     pub timer: u16,
@@ -273,6 +274,7 @@ pub(super) struct Noise {
 impl Noise {
     pub fn new() -> Noise {
         Noise {
+            pal: false,
             length: Length::default(),
             envelope: Envelope::default(),
             timer: 0,
@@ -302,7 +304,14 @@ impl Noise {
 
     pub fn tick(&mut self) {
         if self.timer == 0 {
-            self.timer = NOISE_PERIODS[self.period_index as usize] - 1;
+            let periods = if self.pal {
+                [
+                    4, 8, 14, 30, 60, 88, 118, 148, 188, 236, 354, 472, 708, 944, 1890, 3778,
+                ]
+            } else {
+                NOISE_PERIODS
+            };
+            self.timer = periods[self.period_index as usize] - 1;
             let tap = if self.short { 6 } else { 1 };
             let feedback = (self.shift ^ (self.shift >> tap)) & 1;
             self.shift = (self.shift >> 1) | (feedback << 14);
@@ -319,3 +328,21 @@ impl Noise {
         }
     }
 }
+
+state_fields!(
+    Length,
+    enabled,
+    halt,
+    value,
+    before_clock,
+    pending_halt,
+    pending_reload
+);
+
+state_fields!(Envelope, period,constant,looping,start,divider,decay;|s: &Envelope| s.period<16 && s.decay<16);
+
+state_fields!(Pulse, length,envelope,period,timer,duty,position,sweep_enabled,sweep_period,sweep_negate,sweep_shift,sweep_reload,sweep_divider,first;|s: &Pulse| s.duty<4 && s.position<8 && s.sweep_shift<8);
+
+state_fields!(Triangle, length,period,timer,position,linear_reload,linear,reload,control;|s: &Triangle| s.position<32);
+
+state_fields!(Noise, length,envelope,timer,period_index,short,shift;|s: &Noise| s.period_index<16);

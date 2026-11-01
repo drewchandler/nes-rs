@@ -1,6 +1,6 @@
 # NES sound
 
-The emulator implements the NTSC 2A03 APU and plays 48 kHz mono audio through
+The emulator implements the NTSC/Dendy 2A03 and PAL 2A07 APU and plays 48 kHz mono audio through
 SDL2. Pulse, triangle, noise, and DMC output feed the NES nonlinear mixer,
 band-limited resampling, and approximate 90/440 Hz high-pass and 14 kHz low-pass
 filters. No audio device is required to emulate the APU or run its unit tests.
@@ -52,7 +52,8 @@ status bit does not mean its buffered tail has finished sounding.
 
 ## Shared timing
 
-`Interconnect::cpu_read` and `cpu_write` clock the APU once and PPU three dots.
+`Interconnect::cpu_read` and `cpu_write` clock the APU once and PPU three dots
+on NTSC/Dendy, or 16 dots per five CPU cycles on PAL.
 CPU instruction fetches, dummy accesses, stack accesses, reset, interrupts, and
 DMA all use these methods. Raw `read_word`/`write_word` accesses support setup
 and inspection without advancing time. `Nes::run_frame` waits for the PPU's
@@ -120,9 +121,10 @@ speaker in the cloud environment.
 
 ## Limits
 
-The application targets NTSC and the [supported cartridge boards](mappers.md).
-MMC3 IRQs share the CPU interrupt path with the APU. PAL/Dendy timing and
-cartridge expansion audio require further work. The analog output/filter model
+The application supports NTSC/PAL/Dendy and the [supported cartridge boards](mappers.md).
+Cartridge IRQs share the CPU interrupt path with the APU. VRC6 pulse/saw and
+Sunsoft 5B tone/noise/envelope channels feed the mixer before resampling.
+Other expansion chips remain unsupported. The analog output/filter model
 is an approximation.
 
 CPU-cycle clocking does not model every half-cycle race. Rare DMC abort/start
@@ -130,3 +132,22 @@ and DMA arbitration cases are not fully modeled; controller-read glitches and
 IRQ/NMI vector-hijacking races are outside this validation. Passing these ROMs
 does not establish full hardware bus accuracy. Rendering-time OAM bus and
 corruption limits are described in [sprite rendering](sprite-rendering.md).
+
+## PAL and expansion validation
+
+Ten `pal_apu_tests` ROMs pass basic lengths/table, frame IRQ flags/timing, clock
+jitter, both sequencer modes, length halt, and reload collision timing. The
+runner selects PAL and reads the shell's terminal result at `$F8` (the older
+NTSC shell uses `$F0`). They remain opt-in external fixtures:
+
+```sh
+NES_TEST_ROMS=/tmp/nes-test-roms cargo test --release --locked \
+  apu::rom_tests::pal_ -- --ignored --test-threads=1 --nocapture
+```
+
+Default unit tests cover VRC6 duty/period/halt and saw accumulation, 5B tone
+periods, envelope shapes, noise, and restored oscillator phase. The existing
+Wasm smoke test programs VRC6a/b and Sunsoft 5B through actual CPU writes and
+checks the resampled output pitch around 440 Hz. Relative expansion gains are
+an approximation of the analog cartridge mix. Save-state restore keeps the
+emulated channels/counters and clears host output queues/resampler history.

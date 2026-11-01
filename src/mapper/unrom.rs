@@ -76,3 +76,5 @@ mod tests {
         }
     }
 }
+
+state_fields!(Unrom, active_bank,chr; |s: &Unrom| s.active_bank<s.rom.prg_rom.len());

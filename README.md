@@ -17,22 +17,31 @@ index.html directly. The build needs no Node packages or JavaScript binding tool
 All paths are relative, so the site also works under a GitHub Pages repository path.
 
 Choose a local `.nes` ROM to start. ROM bytes stay in the browser and are never
-uploaded. Desktop and browser builds share support for 28 mapper IDs, including
-NROM, UxROM, CNROM, AxROM, MMC1, MMC2/MMC4, MMC3/MMC6, and common discrete
-boards. See [supported cartridges](docs/mappers.md) for IDs, memory layouts,
+uploaded. Desktop and browser builds share support for 31 mapper IDs, including
+NROM, UxROM, CNROM, AxROM, MMC1, MMC2/MMC4, MMC3/MMC6, VRC6, Sunsoft
+FME-7/5B, and common discrete boards. See [supported cartridges](docs/mappers.md) for IDs, memory layouts,
 submapper variants, and validation.
 
-Legacy iNES and NES 2.0 headers are accepted. NES 2.0 timing must be
-NTSC-compatible; extended ROM sizes and unimplemented board layouts are
-rejected. CHR-ROM is read-only, CHR RAM is writable, and supported boards
-provide banked PRG RAM with their enable/protection controls. Save RAM currently
-lasts only for the running cartridge: reloading or choosing another ROM clears it.
+Legacy iNES and NES 2.0 headers are accepted, with automatic NTSC, PAL, and
+Dendy timing. Both frontends offer a region override. Unsupported board layouts
+and extended/exponent ROM sizes are rejected.
 
-Controls match the desktop app: arrows to move, Z for A, X for B,
-Right Shift for Select, and Enter for Start. The page has pause and mute controls,
-clears held keys on focus loss, and stops emulating while the tab is hidden.
-Sound starts after selecting a ROM when permitted by the browser; video also
-works without audio. Choosing another file resets the emulator.
+The browser includes **2048** and **Concentration Room**, unmodified homebrew
+ROMs published by their authors with redistribution permission. Choose one from
+**Try a game**, or load your own ROM. Credits, licenses, upstream releases, and
+checksums are included under `web/roms` and linked from the page.
+
+Battery-backed game saves persist automatically: `.sav` files beside desktop
+ROMs and per-ROM IndexedDB storage in the browser. Browser import/export moves
+those saves between frontends. Save states (F5/F8) capture the machine at any
+moment, persist per game, and can be transferred as `.nss` files. Bad files and
+wrong-game states are rejected without replacing the running machine.
+
+Two players can use keyboards or gamepads. Player 1 uses arrows, Z/X, Right
+Shift, and Enter; player 2 uses WASD, G/F, R, and T. Browser **Controls** remaps
+keys/buttons; desktop accepts a controls file. The browser includes pause/mute,
+clears held keys on focus loss, and pauses while hidden. Desktop Escape pauses.
+See [saves, states, and controls](docs/saves.md) for details and storage behavior.
 
 ## GitHub Pages
 
@@ -68,8 +77,10 @@ dependencies are excluded from the Wasm target.
 CI runs on pull requests, pushes to `master`, and manual dispatch. It builds
 and tests the native targets on Linux and independently builds the browser site.
 A Node smoke test loads the compiled Wasm module and checks cartridge validation,
-video, audio, controller input, and replacing a running cartridge using a synthetic
-ROMs across all supported mapper IDs; no external ROM is required. CI never publishes a release or deploys Pages.
+video, audio, controller input, and replacing a running cartridge using synthetic
+ROMs across all supported mapper IDs, state/battery round trips, both controller
+ports, PAL/Dendy, expansion audio pitches, and the bundled homebrew demos. No
+external test ROM is required. CI never publishes a release or deploys Pages.
 
 Legacy formatting and compiler warnings are not release blockers in this workflow.
 The current codebase predates modern Rust formatting and lint conventions; those
